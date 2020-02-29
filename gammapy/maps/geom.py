@@ -341,7 +341,7 @@ class MapAxis:
             return False
         return (
             np.allclose(
-                self.edges.to(other.unit).value, other.edges.value, atol=1e-6, rtol=1e-6
+                self.edges.to(other.unit).value, other.edges.value, rtol=1e-5
             )
             and self._node_type == other._node_type
             and self._interp == other._interp
