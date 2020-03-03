@@ -579,12 +579,17 @@ class BackgroundModel(Model):
     def from_dict(cls, data):
         if "filename" in data:
             map = Map.read(data["filename"])
+            filename = data["filename"]
         elif "map" in data:
             map = data["map"]
+            filename = None
         else:
             raise ValueError("Requires either filename or `Map` object")
         model = cls(
-            map=map, name=data["name"], datasets_names=data.get("datasets_names")
+            map=map,
+            name=data["name"],
+            datasets_names=data.get("datasets_names"),
+            filename = filename
         )
         model._update_from_dict(data)
         return model
