@@ -19,14 +19,18 @@ def models_to_dict(models):
     models : list
         Python list of Model objects
     """
+    unique_models = []
+    for model in models:
+        # De-duplicate if model appears several times
+        if model not in unique_models:
+            unique_models.append(model)
+            
     # update shared parameters names for serialization
-    _update_link_reference(models)
+    _update_link_reference(unique_models)
 
     models_data = []
-    for model in models:
-        model_data = model.to_dict()
-        # De-duplicate if model appears several times
-        if model_data not in models_data:
+    for model in unique_models:
+            model_data = model.to_dict()
             models_data.append(model_data)
 
     return {"components": models_data}
