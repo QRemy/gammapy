@@ -3,6 +3,7 @@
 from gammapy.cube.fit import MapDataset
 from gammapy.spectrum import FluxPointsDataset, SpectrumDatasetOnOff
 from .models import Registry, SkyDiffuseCube, SkyModel
+from gammapy.utils.scripts import make_name
 
 # TODO: move this elsewhere ?
 DATASETS = Registry([MapDataset, SpectrumDatasetOnOff, FluxPointsDataset])
@@ -40,8 +41,8 @@ def _update_link_reference(models):
                 params_list.append(param)
             elif param not in params_shared:
                 params_shared.append(param)
-    for k, param in enumerate(params_shared):
-        param._link_label_io = param.name + "@shared_" + str(k)
+    for param in params_shared:
+        param._link_label_io = param.name + "@" + make_name()
 
 
 def dict_to_models(data, link=True):
