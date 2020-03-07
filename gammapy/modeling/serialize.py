@@ -2,7 +2,7 @@
 """Utilities to serialize models."""
 from gammapy.cube.fit import MapDataset
 from gammapy.spectrum import FluxPointsDataset, SpectrumDatasetOnOff
-from .models import Registry, SkyDiffuseCube, SkyModel
+from .models import Registry, SkyDiffuseCube, SkyModel, BackgroundModel
 from gammapy.utils.scripts import make_name
 
 # TODO: move this elsewhere ?
@@ -61,9 +61,8 @@ def dict_to_models(data, link=True):
     """
     models = []
     for component in data["components"]:
-        # background models are created separately
         if component["type"] == "BackgroundModel":
-            continue
+            model = BackgroundModel.from_dict(component)
 
         if component["type"] == "SkyDiffuseCube":
             model = SkyDiffuseCube.from_dict(component)

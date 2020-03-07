@@ -755,16 +755,11 @@ class MapDataset(Dataset):
         """Create from dicts and models list generated from YAML serialization."""
         dataset = cls.read(data["filename"], name=data["name"])
 
-        for component in components["components"]:
-            if component["type"] == "BackgroundModel":
-                if (
-                    dataset.name in component.get("datasets_names", [])
-                    or "datasets_names" not in component
-                ):
-                    if "filename" not in component:
-                        component["map"] = dataset.background_model.map
-                    background_model = BackgroundModel.from_dict(component)
-                    models.append(background_model)
+        for model in models:
+            if isinstance(model,BackgroundModel):
+                if dataset.name in model.datasets_names and model.filename is None:
+                    #get background map
+                    model.map = dataset.background_model.map
 
         dataset.models = models
         return dataset

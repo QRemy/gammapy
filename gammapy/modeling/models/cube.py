@@ -4,7 +4,7 @@ import copy
 from pathlib import Path
 import numpy as np
 import astropy.units as u
-from gammapy.maps import Map
+from gammapy.maps import Map, WcsGeom
 from gammapy.modeling import Parameter, Parameters
 from gammapy.modeling.parameter import _get_parameters_str
 from gammapy.utils.scripts import make_name, make_path
@@ -528,7 +528,7 @@ class BackgroundModel(Model):
         self.filename = filename
 
         if isinstance(datasets_names, list):
-            if len(datasets_names) > 1:
+            if len(datasets_names) != 1:
                 raise ValueError("Currently background models can only be assigned to one dataset.")
 
         self.datasets_names = datasets_names
@@ -584,7 +584,10 @@ class BackgroundModel(Model):
             map = data["map"]
             filename = None
         else:
-            raise ValueError("Requires either filename or `Map` object")
+            # TODO: required for now serialization, have to instanciate models 
+            # before setting them to dataset because of parameters linking
+            geom = WcsGeom.create(skydir=(0, 0), npix=(1, 1), frame="galactic")
+            Map.from_geom(geom)
         model = cls(
             map=map,
             name=data["name"],
