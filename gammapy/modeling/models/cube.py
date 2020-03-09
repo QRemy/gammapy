@@ -4,7 +4,7 @@ import copy
 from pathlib import Path
 import numpy as np
 import astropy.units as u
-from gammapy.maps import Map, WcsGeom
+from gammapy.maps import Map, MapAxis, WcsGeom
 from gammapy.modeling import Parameter, Parameters
 from gammapy.modeling.parameter import _get_parameters_str
 from gammapy.utils.scripts import make_name, make_path
@@ -578,18 +578,20 @@ class BackgroundModel(Model):
     @classmethod
     def from_dict(cls, data):
         if "filename" in data:
-            map = Map.read(data["filename"])
+            bkg_map = Map.read(data["filename"])
             filename = data["filename"]
         elif "map" in data:
-            map = data["map"]
+            bkg_map = data["map"]
             filename = None
         else:
-            # TODO: required for now serialization, have to instanciate models 
-            # before setting them to dataset because of parameters linking
-            geom = WcsGeom.create(skydir=(0, 0), npix=(1, 1), frame="galactic")
-            Map.from_geom(geom)
+            # TODO: for now fake map required  in serialization,
+            # create models before setting them to dataset because of parameters links
+            axis = MapAxis.from_edges(np.logspace(-1, 1, 3), unit=u.TeV, name="energy")
+            geom = WcsGeom.create(skydir=(0, 0), npix=(1, 1), frame="galactic", axes=[axis])
+            bkg_map = Map.from_geom(geom)
+            filename = None
         model = cls(
-            map=map,
+            map=bkg_map,
             name=data["name"],
             datasets_names=data.get("datasets_names"),
             filename = filename
