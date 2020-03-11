@@ -826,8 +826,8 @@ class FluxPointsEstimator:
         model = dataset.models[source].spectral_model
 
         self.model = ScaleSpectralModel(model)
-        self.model.norm.min = 0
-        self.model.norm.max = 1e3
+        self.model.norm.min = norm_min
+        self.model.norm.max = norm_max
 
         if norm_values is None:
             norm_values = np.logspace(
