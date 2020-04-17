@@ -907,6 +907,8 @@ class TemplateSpectralModel(SpectralModel):
     norm = Parameter("norm", 1, unit="")
     tilt = Parameter("tilt", 0, unit="", frozen=True)
     reference = Parameter("reference", "1 TeV", frozen=True)
+    lambda_ = Parameter("lambda_", "0. TeV-1", frozen=True)
+    alpha = Parameter("alpha", "1.0", frozen=True)
 
     def __init__(
         self,
@@ -981,11 +983,12 @@ class TemplateSpectralModel(SpectralModel):
         kwargs.setdefault("interp_kwargs", {"values_scale": "lin"})
         return cls(energy=energy, values=values, **kwargs)
 
-    def evaluate(self, energy, norm, tilt, reference):
+    def evaluate(self, energy, norm, tilt, reference, lambda_, alpha):
         """Evaluate the model (static function)."""
         values = self._evaluate((energy,), clip=True)
         tilt_factor = np.power(energy / reference, -tilt)
-        return norm * values * tilt_factor
+        cutoff = np.exp(-np.power(energy * lambda_, alpha))
+        return norm * values * tilt_factor * cutoff
 
     def to_dict(self):
         return {
