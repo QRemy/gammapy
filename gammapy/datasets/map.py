@@ -2,6 +2,7 @@
 import logging
 import numpy as np
 import astropy.units as u
+from astropy.coordinates import SkyCoord
 from astropy.io import fits
 from astropy.nddata.utils import NoOverlapError
 from astropy.table import Table
@@ -1745,19 +1746,32 @@ class MapEvaluator:
         log.debug("Updating model evaluator")
         # cache current position of the model component
 
-        # lookup edisp
-        if edisp:
-            energy_axis = geom.get_axis_by_name("energy")
-            self.edisp = edisp.get_edisp_kernel(self.model.position, energy_axis=energy_axis)
+        irf_position = self.model.position.copy()
+        geom2d = geom.to_image()
+        if not geom2d.contains(self.model.position)[0]:
+            coords = SkyCoord(
+                geom2d.get_coord()["lon"], geom2d.get_coord()["lat"], frame=geom2d.frame
+            )
+            separation = coords.separation(irf_position)
+            separation[exposure.sum_over_axes().data==0]=np.inf
+            ilon, ilat = np.where(separation == np.min(separation))
+            irf_position = coords[ilon[0], ilat[0]]
 
         if isinstance(psf, PSFMap):
-            # lookup psf
-            self.psf = psf.get_psf_kernel(self.model.position, geom=exposure.geom)
+            self.psf = psf.get_psf_kernel(irf_position, geom=exposure.geom)
         else:
             self.psf = psf
 
+        if isinstance(edisp, EDispKernelMap):
+            self.edisp = edisp.get_edisp_kernel(irf_position)
+        elif isinstance(edisp, EDispMap):
+            e_reco = geom.get_axis_by_name("energy").edges
+            self.edisp = edisp.get_edisp_kernel(irf_position, e_reco=e_reco)
+        else:
+            self.edisp = edisp
+
         if self.evaluation_mode == "local" and self.model.evaluation_radius is not None:
-            self._init_position = self.model.position
+            self._init_position = irf_position
             if self.psf is not None:
                 psf_width = np.max(self.psf.psf_kernel_map.geom.width)
             else:
@@ -1766,7 +1780,7 @@ class MapEvaluator:
             width = psf_width + 2 * (self.model.evaluation_radius + CUTOUT_MARGIN)
             try:
                 self.exposure = exposure.cutout(
-                    position=self.model.position, width=width
+                    position=irf_position, width=width
                 )
                 self.contributes = True
             except (NoOverlapError, ValueError):
