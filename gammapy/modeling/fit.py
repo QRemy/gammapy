@@ -101,7 +101,7 @@ class Fit:
             Results
         """
 
-        self.check_limits(strict=True)
+#        self.check_limits(strict=False)
 
         if optimize_opts is None:
             optimize_opts = {}
