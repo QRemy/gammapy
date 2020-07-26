@@ -95,8 +95,8 @@ class SpectrumDataset(Dataset):
 
         # TODO: this enforces the exposure on the edisp map, maybe better move
         #  to where the EDispKernelMap is created?
-        if edisp is not None:
-            self.edisp.exposure_map.data = self.exposure.data
+#        if edisp is not None:
+#            self.edisp.exposure_map.data = self.exposure.data
 
     @property
     def name(self):
@@ -265,9 +265,11 @@ class SpectrumDataset(Dataset):
 
     @property
     def _edisp_kernel(self):
-        """The edisp kernel stored in the EDispMapKernel"""
-        if self.edisp is not None:
+        """The edisp kernel stored in the EDispKernelMap"""
+        if isinstance(self.edisp,EDispKernelMap):#not None:
             return self.edisp.get_edisp_kernel()
+        else:
+            return self.edisp
 
     def npred_sig(self):
         """Predicted counts from source model (`RegionNDMap`)."""
