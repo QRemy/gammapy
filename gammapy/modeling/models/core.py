@@ -533,11 +533,11 @@ class ProperModels(Models):
                     d._models.remove(key)
 
     def __setitem__(self, key, model):
-        from gammapy.modeling.models import SkyModel, SkyDiffuseCube
+        from gammapy.modeling.models import SkyModel, SkyDiffuseCube, BackgroundModel
 
         for d in self._datasets:
             if model not in d._models:
-                if isinstance(model, (SkyModel, SkyDiffuseCube)):
+                if isinstance(model, (SkyModel, SkyDiffuseCube, BackgroundModel)):
                     d._models[key] = model
 
                 else:
@@ -550,11 +550,11 @@ class ProperModels(Models):
                 model.datasets_names.append(d.name)
 
     def insert(self, idx, model):
-        from gammapy.modeling.models import SkyModel, SkyDiffuseCube
+        from gammapy.modeling.models import SkyModel, SkyDiffuseCube, BackgroundModel
 
         for d in self._datasets:
             if model not in d._models:
-                if isinstance(model, (SkyModel, SkyDiffuseCube)):
+                if isinstance(model, (SkyModel, SkyDiffuseCube, BackgroundModel)):
                     if idx == len(self):
                         index = len(d._models)
                     else:
