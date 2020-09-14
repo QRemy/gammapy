@@ -177,6 +177,17 @@ class Background3D:
             method=method,
             **kwargs,
         )
+        
+        values_nearest = self.data.evaluate(
+            fov_lon=fov_lon,
+            fov_lat=fov_lat,
+            energy=energy_reco,
+            method="nearest",
+            **kwargs,
+        )
+        #TODO: find the problem with interp, for now clip using nearest where odd
+        ind = values > 1e2 * values_nearest
+        values[ind] = values_nearest[ind]
         return values
 
     def evaluate_integrate(
