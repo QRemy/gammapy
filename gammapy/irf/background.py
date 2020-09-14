@@ -186,8 +186,7 @@ class Background3D:
             **kwargs,
         )
         #TODO: find the problem with interp, for now clip using nearest where odd
-        ind = values > 1e2 * values_nearest
-        values[ind] = values_nearest[ind]
+        values[-1,:,:] = values_nearest[-1,:,:]
         return values
 
     def evaluate_integrate(
