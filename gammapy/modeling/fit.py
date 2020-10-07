@@ -67,12 +67,16 @@ class Fit:
     ----------
     datasets : `Datasets`
         Datasets
+    parallel : use parallel datasets evaluation if supported
     """
 
-    def __init__(self, datasets):
-        from gammapy.datasets import Datasets
+    def __init__(self, datasets, parallel=False):
+        from gammapy.datasets import Datasets, DatasetsActor, MapDataset
 
-        self.datasets = Datasets(datasets)
+        if parallel and np.all([isinstance(d, MapDataset) for d in datasets]):
+            self.datasets = DatasetsActor(datasets)
+        else:
+            self.datasets = Datasets(datasets)
 
     @lazyproperty
     def _parameters(self):
@@ -100,7 +104,6 @@ class Fit:
         fit_result : `FitResult`
             Results
         """
-
 
         if optimize_opts is None:
             optimize_opts = {}

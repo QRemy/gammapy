@@ -1,5 +1,6 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 import abc
+import ray
 import collections.abc
 import copy
 import numpy as np
@@ -15,7 +16,7 @@ from gammapy.data import GTI
 log = logging.getLogger(__name__)
 
 
-__all__ = ["Dataset", "Datasets"]
+__all__ = ["Dataset", "Datasets", "DatasetsActor"]
 
 
 class Dataset(abc.ABC):
@@ -227,15 +228,16 @@ class Datasets(collections.abc.MutableSequence):
             try:
                 group = energy_axis.group_table(edges=[e_min, e_max])
             except ValueError:
-                log.info(f"Dataset {dataset.name} does not contribute in the energy range")
+                log.info(
+                    f"Dataset {dataset.name} does not contribute in the energy range"
+                )
                 continue
 
             is_normal = group["bin_type"] == "normal   "
             group = group[is_normal]
 
-            slices = {"energy": slice(
-                int(group["idx_min"][0]),
-                int(group["idx_max"][0]) + 1)
+            slices = {
+                "energy": slice(int(group["idx_min"][0]), int(group["idx_max"][0]) + 1)
             }
 
             name = f"{dataset.name}-{e_min:.3f}-{e_max:.3f}"
@@ -299,7 +301,14 @@ class Datasets(collections.abc.MutableSequence):
         return copy.deepcopy(self)
 
     @classmethod
-    def read(cls, path, filedata="_datasets.yaml", filemodel="_models.yaml", lazy=True, cache=True):
+    def read(
+        cls,
+        path,
+        filedata="_datasets.yaml",
+        filemodel="_models.yaml",
+        lazy=True,
+        cache=True,
+    ):
         """De-serialize datasets from YAML and FITS files.
 
         Parameters
@@ -490,3 +499,30 @@ class Datasets(collections.abc.MutableSequence):
 
     def __len__(self):
         return len(self._datasets)
+
+
+class DatasetsActor(Datasets):
+    """A modified Dataset collection for parallel evaluation using ray actors.
+    Fore now only available if composed only of MapDataset.
+
+    Parameters
+    ----------
+    datasets : `Datasets`
+        Datasets
+    """
+
+    def __init__(self, datasets):
+        from .map import MapDatasetActor
+
+        self._datasets = datasets
+        self._actors = [MapDatasetActor.remote(d) for d in datasets]
+
+    def stat_sum(self):
+        """Compute joint likelihood"""
+        args = [d.models.parameters.get_parameter_values() for d in self._datasets]
+        ray.get(
+            [a.set_parameter_values.remote(arg) for a, arg in zip(self._actors, args)]
+        )
+        # blocked until set_parameters_factors on actors complete
+        res = ray.get([a.stat_sum.remote() for a in self._actors])
+        return np.sum(res)

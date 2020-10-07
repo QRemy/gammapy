@@ -1,4 +1,5 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
+import ray
 import logging
 from functools import lru_cache
 import numpy as np
@@ -26,7 +27,12 @@ from gammapy.utils.fits import LazyFitsData, HDULocation
 from gammapy.utils.table import hstack_columns
 from .core import Dataset
 
-__all__ = ["MapDataset", "MapDatasetOnOff", "create_map_dataset_geoms"]
+__all__ = [
+    "MapDataset",
+    "MapDatasetActor",
+    "MapDatasetOnOff",
+    "create_map_dataset_geoms",
+]
 
 log = logging.getLogger(__name__)
 
@@ -86,9 +92,7 @@ def create_map_dataset_geoms(
     if migra_axis:
         geom_edisp = geom_irf.to_cube([migra_axis, energy_axis_true])
     else:
-        geom_edisp = geom_irf.to_cube(
-            [geom.axes["energy"], energy_axis_true]
-        )
+        geom_edisp = geom_irf.to_cube([geom.axes["energy"], energy_axis_true])
 
     return {
         "geom": geom,
@@ -1183,7 +1187,10 @@ class MapDataset(Dataset):
 
         if self.counts is not None:
             kwargs["counts"] = self.counts.downsample(
-                factor=factor, preserve_counts=True, axis_name=axis_name, weights=self.mask_safe
+                factor=factor,
+                preserve_counts=True,
+                axis_name=axis_name,
+                weights=self.mask_safe,
             )
 
         if self.exposure is not None:
@@ -1202,7 +1209,9 @@ class MapDataset(Dataset):
 
         if self.edisp is not None:
             if axis_name is not None:
-                kwargs["edisp"] = self.edisp.downsample(factor=factor, axis_name=axis_name)
+                kwargs["edisp"] = self.edisp.downsample(
+                    factor=factor, axis_name=axis_name
+                )
             else:
                 kwargs["edisp"] = self.edisp.copy()
 
@@ -1347,14 +1356,20 @@ class MapDataset(Dataset):
         kwargs["psf"] = self.psf
 
         if self.mask_safe is not None:
-            kwargs["mask_safe"] = self.mask_safe.resample_axis(axis=energy_axis, ufunc=np.logical_or)
+            kwargs["mask_safe"] = self.mask_safe.resample_axis(
+                axis=energy_axis, ufunc=np.logical_or
+            )
 
         if self.counts is not None:
-            kwargs["counts"] = self.counts.resample_axis(axis=energy_axis, weights=self.mask_safe)
+            kwargs["counts"] = self.counts.resample_axis(
+                axis=energy_axis, weights=self.mask_safe
+            )
 
         if self.background_model is not None:
             background = self.background_model.evaluate()
-            background = background.resample_axis(axis=energy_axis, weights=self.mask_safe)
+            background = background.resample_axis(
+                axis=energy_axis, weights=self.mask_safe
+            )
             model = BackgroundModel(
                 background, datasets_names=[name], name=f"{name}-bkg"
             )
@@ -1365,7 +1380,9 @@ class MapDataset(Dataset):
             mask_irf = self._mask_safe_irf(
                 self.edisp.edisp_map, self.mask_safe, drop="energy_true"
             )
-            kwargs["edisp"] = self.edisp.resample_energy_axis(energy_axis=energy_axis, weights=mask_irf)
+            kwargs["edisp"] = self.edisp.resample_energy_axis(
+                energy_axis=energy_axis, weights=mask_irf
+            )
         else:  # None or EDispMap
             kwargs["edisp"] = self.edisp
 
@@ -1386,6 +1403,24 @@ class MapDataset(Dataset):
         """
         energy_axis = self._geom.axes["energy"].squash()
         return self.resample_energy_axis(energy_axis=energy_axis, name=name)
+
+
+@ray.remote
+class MapDatasetActor(MapDataset):
+    "A modified map MapDataset for parallel evaluation with ray"
+
+    def __init__(self, dataset):
+        self.__dict__.update(dataset.__dict__)
+
+    #        TODO: how to keep the acces to property ?
+
+    def set_parameter_values(self, values):
+        #        TODO: remove this if acces to properties is working
+        idx = 0
+        for parameter in self.models.parameters:
+            if not parameter.frozen:
+                parameter.value = values[idx]
+                idx += 1
 
 
 class MapDatasetOnOff(MapDataset):
@@ -1968,7 +2003,10 @@ class MapDatasetOnOff(MapDataset):
         counts_off = None
         if self.counts_off is not None:
             counts_off = self.counts_off.downsample(
-                factor=factor, preserve_counts=True, axis_name=axis_name, weights=self.mask_safe
+                factor=factor,
+                preserve_counts=True,
+                axis_name=axis_name,
+                weights=self.mask_safe,
             )
 
         acceptance, acceptance_off = None, None
@@ -1977,7 +2015,10 @@ class MapDatasetOnOff(MapDataset):
                 factor=factor, preserve_counts=False, axis_name=axis_name
             )
             factor = self.counts_off_normalised.downsample(
-                factor=factor, preserve_counts=True, axis_name=axis_name, weights=self.mask_safe
+                factor=factor,
+                preserve_counts=True,
+                axis_name=axis_name,
+                weights=self.mask_safe,
             )
             acceptance_off = acceptance * counts_off / factor
 
@@ -1985,7 +2026,7 @@ class MapDatasetOnOff(MapDataset):
             dataset,
             acceptance=acceptance,
             acceptance_off=acceptance_off,
-            counts_off=counts_off
+            counts_off=counts_off,
         )
 
     def pad(self):
@@ -2047,15 +2088,21 @@ class MapDatasetOnOff(MapDataset):
         counts_off = None
         if self.counts_off is not None:
             counts_off = self.counts_off
-            counts_off = counts_off.resample_axis(axis=energy_axis, weights=self.mask_safe)
+            counts_off = counts_off.resample_axis(
+                axis=energy_axis, weights=self.mask_safe
+            )
 
         acceptance = 1
         acceptance_off = None
         if self.acceptance is not None:
             acceptance = self.acceptance
-            acceptance = acceptance.resample_axis(axis=energy_axis, weights=self.mask_safe)
+            acceptance = acceptance.resample_axis(
+                axis=energy_axis, weights=self.mask_safe
+            )
 
-            norm_factor = self.counts_off_normalised.resample_axis(axis=energy_axis, weights=self.mask_safe)
+            norm_factor = self.counts_off_normalised.resample_axis(
+                axis=energy_axis, weights=self.mask_safe
+            )
 
             acceptance_off = acceptance * counts_off / norm_factor
 
@@ -2063,7 +2110,7 @@ class MapDatasetOnOff(MapDataset):
             dataset,
             acceptance=acceptance,
             acceptance_off=acceptance_off,
-            counts_off=counts_off
+            counts_off=counts_off,
         )
 
 
