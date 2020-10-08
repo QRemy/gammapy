@@ -469,12 +469,12 @@ class ProperModels(Models):
     """ Proper Models of a Dataset or Datasets."""
 
     def __init__(self, parent):
-        from gammapy.datasets import Dataset, Datasets
+        from gammapy.datasets import Dataset, Datasets, DatasetsActor
 
         if isinstance(parent, Dataset):
             self._datasets = [parent]
             self._is_dataset = True
-        elif isinstance(parent, Datasets):
+        elif isinstance(parent, Datasets) or isinstance(parent, DatasetsActor):
             self._datasets = parent._datasets
             self._is_dataset = False
         else:

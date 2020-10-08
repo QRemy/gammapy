@@ -74,7 +74,10 @@ class Fit:
         from gammapy.datasets import Datasets, DatasetsActor, MapDataset
 
         if parallel and np.all([isinstance(d, MapDataset) for d in datasets]):
-            self.datasets = DatasetsActor(datasets)
+            if not isinstance(datasets, DatasetsActor):
+                self.datasets = DatasetsActor(datasets)
+            else:
+                self.datasets = datasets
         else:
             self.datasets = Datasets(datasets)
 
@@ -104,6 +107,10 @@ class Fit:
         fit_result : `FitResult`
             Results
         """
+        from gammapy.datasets import DatasetsActor
+
+        if isinstance(self.datasets, DatasetsActor):
+            self.datasets._update_remote_models()
 
         if optimize_opts is None:
             optimize_opts = {}
