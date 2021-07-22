@@ -6,6 +6,7 @@ import itertools
 import logging
 import numpy as np
 from astropy import units as u
+from astropy.utils import lazyproperty
 from gammapy.utils.table import table_from_row_data
 from gammapy.utils.interpolation import interpolation_scale
 
@@ -56,8 +57,6 @@ class Parameter:
         Name
     value : float or `~astropy.units.Quantity`
         Value
-    scale : float, optional
-        Scale (sometimes used in fitting)
     unit : `~astropy.units.Unit` or str, optional
         Unit
     min : float, optional
@@ -78,10 +77,8 @@ class Parameter:
         Number of sigmas to scan.
     scan_values: `numpy.array`
         Scan values. Overwrites all of the scan keywords before.
-    scaler : {'scale10', 'factor1', None}
-        Method used to set ``factor`` and ``scale``
-    interp : {"lin", "sqrt", "log"}
-        Parameter scaling to use for the scan.
+    scale : {"lin", "sqrt", "log"}
+        Parameter scaling method
 
     """
 
@@ -90,7 +87,6 @@ class Parameter:
         name,
         value,
         unit="",
-        scale=1,
         min=np.nan,
         max=np.nan,
         frozen=False,
@@ -100,16 +96,13 @@ class Parameter:
         scan_n_values=11,
         scan_n_sigma=2,
         scan_values=None,
-        scaler=None,
-        interp="lin",
+        scale="lin",
     ):
         self.name = name
         self._link_label_io = None
-        self.scale = scale
         self.min = min
         self.max = max
         self.frozen = frozen
-        self.scaler = scaler
         self._error = error
         self._type = None
 
@@ -128,7 +121,7 @@ class Parameter:
         self.scan_values = scan_values
         self.scan_n_values = scan_n_values
         self.scan_n_sigma = scan_n_sigma
-        self.interp = interp
+        self._scale = scale
 
     def __get__(self, instance, owner):
         if instance is None:
@@ -143,6 +136,14 @@ class Parameter:
         else:
             par = instance.__dict__[self.name]
             raise TypeError(f"Cannot assign {value!r} to parameter {par!r}")
+
+    @property
+    def scale(self):
+        return self._scale
+
+    @lazyproperty
+    def scale_method(self):
+        return interpolation_scale(self.scale)
 
     @property
     def type(self):
@@ -177,15 +178,6 @@ class Parameter:
         self._factor = float(val)
 
     @property
-    def scale(self):
-        """Scale (float)."""
-        return self._scale
-
-    @scale.setter
-    def scale(self, val):
-        self._scale = float(val)
-
-    @property
     def unit(self):
         """Unit (`~astropy.units.Unit`)."""
         return self._unit
@@ -211,9 +203,9 @@ class Parameter:
     def factor_min(self):
         """Factor min (float).
 
-        This ``factor_min = min / scale`` is for the optimizer interface.
+        Used by the the optimizer interface.
         """
-        return self.min / self.scale
+        return self.scale_method(self.min)
 
     @property
     def max(self):
@@ -232,20 +224,10 @@ class Parameter:
     def factor_max(self):
         """Factor max (float).
 
-        This ``factor_max = max / scale`` is for the optimizer interface.
+        Used by the optimizer interface.
         """
-        return self.max / self.scale
+        return self.scale_method(self.max)
 
-    @property
-    def scaler(self):
-        """Method used to set ``factor`` and ``scale``"""
-        return self._scaler
-
-    @scaler.setter
-    def scaler(self, val):
-        if val not in ["scale10", "factor1"] and val is not None:
-            raise ValueError(f"Invalid method: {val}")
-        self._scaler = val
 
     @property
     def frozen(self):
@@ -263,11 +245,11 @@ class Parameter:
     @property
     def value(self):
         """Value = factor x scale (float)."""
-        return self._factor * self._scale
+        return  self.scale_method.inverse(self._factor)
 
     @value.setter
     def value(self, val):
-        self.factor = float(val) / self._scale
+        self.factor = self.scale_method(float(val))
 
     @property
     def quantity(self):
@@ -326,10 +308,9 @@ class Parameter:
     def scan_values(self):
         """Stat scan values (`~numpy.ndarray`)"""
         if self._scan_values is None:
-            scale = interpolation_scale(self.interp)
-            parmin, parmax = scale([self.scan_min, self.scan_max])
+            parmin, parmax = self.scale_method([self.scan_min, self.scan_max])
             values = np.linspace(parmin, parmax, self.scan_n_values)
-            return scale.inverse(values)
+            return self.scale_method.inverse(values)
 
         return self._scan_values
 
@@ -374,6 +355,7 @@ class Parameter:
             "unit": self.unit.to_string("fits"),
             "min": self.min,
             "max": self.max,
+            "scale": self.scale,
             "frozen": self.frozen,
             "error": self.error,
         }
@@ -382,31 +364,6 @@ class Parameter:
             output["link"] = self._link_label_io
         return output
 
-    def autoscale(self):
-        """Autoscale the parameters.
-
-        Set ``factor`` and ``scale`` according to ``scaler`` attribute
-
-        Available ``scaler``
-
-        * ``scale10`` sets ``scale`` to power of 10,
-          so that abs(factor) is in the range 1 to 10
-        * ``factor1`` sets ``factor, scale = 1, value``
-
-        In both cases the sign of value is stored in ``factor``,
-        i.e. the ``scale`` is always positive. 
-        If ``scaler`` is None the scaling is ignored.
-
-        """
-        if self.scaler == "scale10":
-            value = self.value
-            if value != 0:
-                exponent = np.floor(np.log10(np.abs(value)))
-                scale = np.power(10.0, exponent)
-                self.factor = value / scale
-                self.scale = scale
-        elif self.scaler == "factor1":
-            self.factor, self.scale = 1, self.value
 
 
 class Parameters(collections.abc.Sequence):
@@ -593,15 +550,6 @@ class Parameters(collections.abc.Sequence):
             if not parameter.frozen:
                 parameter.factor = factors[idx]
                 idx += 1
-
-    def autoscale(self):
-        """Autoscale all parameters.
-
-        See :func:`~gammapy.modeling.Parameter.autoscale`
-
-        """
-        for par in self._parameters:
-            par.autoscale()
 
     def select(
         self, name=None, type=None, frozen=None,

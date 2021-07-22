@@ -208,7 +208,8 @@ def make_minuit_par_kwargs(parameters):
         if par.error == 0 or np.isnan(par.error):
             error = 1
         else:
-            error = par.error / par.scale
+            factor_errp = par.scale_method(par.value + par.error)
+            error = factor_errp - par.scale_method(par.value)
         kwargs[f"error_{name}"] = error
 
     return kwargs
