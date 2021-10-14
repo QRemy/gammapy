@@ -649,7 +649,7 @@ class MapDataset(Dataset):
                 Passed to `~gammapy.utils.random.get_random_state`.
         """
         random_state = get_random_state(random_state)
-        npred = self.npred()
+        npred = self.npred() * self.mask_safe
         npred.data = random_state.poisson(npred.data)
         self.counts = npred
 
