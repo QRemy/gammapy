@@ -650,7 +650,7 @@ class MapDataset(Dataset):
         """
         random_state = get_random_state(random_state)
         npred = self.npred() * self.mask_safe
-        npred.data = random_state.poisson(npred.data)
+        npred.data[self.mask_safe] = random_state.poisson(npred.data[self.mask_safe])
         self.counts = npred
 
     def to_hdulist(self):
