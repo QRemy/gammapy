@@ -107,6 +107,12 @@ class Background3D:
                 "Invalid unit found in background table! Assuming (s-1 MeV-1 sr-1)"
             )
 
+        data = table[bkg_name].quantity[0].T
+        if np.shape(data)[0] != len(table["ENERG_LO"].quantity[0]):
+            log.debug("Transposing background table on read")
+            data = data.transpose()
+            
+
         return cls(
             energy_lo=table["ENERG_LO"].quantity[0],
             energy_hi=table["ENERG_HI"].quantity[0],
@@ -114,7 +120,7 @@ class Background3D:
             fov_lon_hi=table["DETX_HI"].quantity[0],
             fov_lat_lo=table["DETY_LO"].quantity[0],
             fov_lat_hi=table["DETY_HI"].quantity[0],
-            data=table[bkg_name].data[0] * data_unit,
+            data=data.value * data_unit,
             meta=table.meta,
         )
 
@@ -300,12 +306,19 @@ class Background2D:
             log.warning(
                 "Invalid unit found in background table! Assuming (s-1 MeV-1 sr-1)"
             )
+            
+        data = table[bkg_name].quantity[0].T
+        if np.shape(data)[0] != len(table["ENERG_LO"].quantity[0]):
+            log.debug("Transposing background table on read")
+            data = data.transpose()
+            
+        
         return cls(
             energy_lo=table["ENERG_LO"].quantity[0],
             energy_hi=table["ENERG_HI"].quantity[0],
             offset_lo=table["THETA_LO"].quantity[0],
             offset_hi=table["THETA_HI"].quantity[0],
-            data=table[bkg_name].data[0] * data_unit,
+            data=data.value * data_unit,
             meta=table.meta,
         )
 
