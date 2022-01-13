@@ -3,6 +3,7 @@
 import logging
 from gammapy.maps import Map
 from ..core import Maker
+import numpy as np
 
 __all__ = ["FoVBackgroundMaker"]
 
@@ -84,8 +85,16 @@ class FoVBackgroundMaker(Maker):
             if par not in dataset.background_model.parameters:
                 par.frozen = True
 
+        nfree = sum([not p.frozen for p in datasets.parameters])
+        optimize_opts = {
+            "tol": 1.0,
+            "strategy": 1,
+        }
+        optimize_opts["migrad_opts"] = {"ncall":  500 * nfree}
+
         fit = Fit(datasets)
-        fit_result = fit.run()
+        fit_result = fit.run(optimize_opts=optimize_opts)
+        print(fit_result)
         if fit_result.success is False:
             log.info(
                 f"FoVBackgroundMaker failed. No fit convergence for {dataset.name}."
@@ -98,17 +107,19 @@ class FoVBackgroundMaker(Maker):
     def _scale_bkg(self, dataset):
         """Fit the FoV background model on the dataset counts data"""
         mask = dataset.mask
+        npred = dataset.npred().data
+        mask &= ~np.isnan(npred)
+        npred_tot = npred[mask].sum()
         count_tot = dataset.counts.data[mask].sum()
-        bkg_tot = dataset.background_model.map.data[mask].sum()
 
         if count_tot <= 0.0:
             log.info(
                 f"FoVBackgroundMaker failed. No counts found outside exclusion mask for {dataset.name}."
             )
-        elif bkg_tot <= 0.0:
+        elif npred_tot <= 0.0:
             log.info(
                 f"FoVBackgroundMaker failed. No positive background found outside exclusion mask for {dataset.name}."
             )
         else:
-            scale = count_tot / bkg_tot
-            dataset.background_model.norm.value = scale
+            scale = count_tot / npred_tot
+            dataset.background_model.norm.value *= scale
