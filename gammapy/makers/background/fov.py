@@ -111,15 +111,17 @@ class FoVBackgroundMaker(Maker):
         mask &= ~np.isnan(npred)
         npred_tot = npred[mask].sum()
         count_tot = dataset.counts.data[mask].sum()
-
-        if count_tot <= 0.0:
+        bkg_tot = dataset.npred_background().data[mask].sum()
+        not_bkg_tot = npred_tot - bkg_tot
+        
+        if count_tot-not_bkg_tot <= 0.0:
             log.info(
                 f"FoVBackgroundMaker failed. No counts found outside exclusion mask for {dataset.name}."
             )
-        elif npred_tot <= 0.0:
+        elif bkg_tot <= 0.0:
             log.info(
                 f"FoVBackgroundMaker failed. No positive background found outside exclusion mask for {dataset.name}."
             )
         else:
-            scale = count_tot / npred_tot
+            scale = (count_tot-not_bkg_tot) / bkg_tot
             dataset.background_model.norm.value *= scale
