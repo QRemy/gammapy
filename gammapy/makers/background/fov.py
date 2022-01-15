@@ -111,7 +111,7 @@ class FoVBackgroundMaker(Maker):
         mask &= ~np.isnan(npred)
         npred_tot = npred[mask].sum()
         count_tot = dataset.counts.data[mask].sum()
-        bkg_tot = dataset.npred_background().data[mask].sum()
+        bkg_tot = dataset.background_model.map.data[mask].sum()
         not_bkg_tot = npred_tot - bkg_tot
         
         if count_tot-not_bkg_tot <= 0.0:
