@@ -111,6 +111,8 @@ class MapEvaluator:
             return False
         if isinstance(self.model, TemplateNPredModel):
             return False
+        elif not self.contributes:
+            return False
         elif self.exposure is None:
             return True
         elif self.geom.is_region:
