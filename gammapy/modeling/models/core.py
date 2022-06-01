@@ -147,7 +147,7 @@ class ModelBase:
         """A deep copy."""
         return copy.deepcopy(self)
 
-    def to_dict(self, full_output=False):
+    def to_dict(self, full_output=True):
         """Create dict for YAML serialisation"""
         tag = self.tag[0] if isinstance(self.tag, list) else self.tag
         params = self.parameters.to_dict()
@@ -426,7 +426,7 @@ class DatasetModels(collections.abc.Sequence):
         self,
         path,
         overwrite=False,
-        full_output=False,
+        full_output=True,
         overwrite_templates=False,
         write_covariance=True,
     ):
@@ -466,7 +466,7 @@ class DatasetModels(collections.abc.Sequence):
 
         path.write_text(self.to_yaml(full_output, overwrite_templates))
 
-    def to_yaml(self, full_output=False, overwrite_templates=False):
+    def to_yaml(self, full_output=True, overwrite_templates=False):
         """Convert to YAML string."""
         data = self.to_dict(full_output, overwrite_templates)
         return yaml.dump(
@@ -486,7 +486,7 @@ class DatasetModels(collections.abc.Sequence):
         for param in params_shared:
             param._link_label_io = param.name + "@" + make_name()
 
-    def to_dict(self, full_output=False, overwrite_templates=False):
+    def to_dict(self, full_output=True, overwrite_templates=False):
         """Convert to dict."""
 
         self.update_link_label()
