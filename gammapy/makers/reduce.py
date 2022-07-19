@@ -5,6 +5,7 @@ from astropy.coordinates import Angle
 from gammapy.datasets import Datasets, MapDataset, MapDatasetOnOff, SpectrumDataset
 from .core import Maker
 from .safe import SafeMaskMaker
+import os
 
 log = logging.getLogger(__name__)
 
@@ -13,6 +14,21 @@ __all__ = [
     "DatasetsMaker",
 ]
 
+def make_dataset(makers, dataset, observation):
+    """Make single dataset.
+
+    Parameters
+    ----------
+    dataset : `~gammapy.datasets.MapDataset`
+        Reference dataset
+    observation : `Observation`
+        Observation
+    """
+    log.info(f"Computing dataset for observation {observation.obs_id}")
+    for maker in makers:
+        log.info(f"Running {maker.tag}")
+        dataset = maker.run(dataset=dataset, observation=observation)
+    return dataset
 
 class DatasetsMaker(Maker):
     """Run makers in a chain
@@ -34,6 +50,8 @@ class DatasetsMaker(Maker):
         If only one value is passed, a square region is extracted.
         If None it returns an error, except if the list of makers includes a `SafeMaskMaker`
         with the offset-max method defined. In that case it is set to two times `offset_max`.
+    outdir : str
+        If provided the individual datasets will be stored in the given directory. 
     """
 
     tag = "DatasetsMaker"
@@ -45,6 +63,7 @@ class DatasetsMaker(Maker):
         n_jobs=None,
         cutout_mode="trim",
         cutout_width=None,
+        outdir=None
     ):
         self.log = logging.getLogger(__name__)
         self.makers = makers
@@ -60,6 +79,7 @@ class DatasetsMaker(Maker):
                 self.cutout_width = 2 * self.offset_max
         self.n_jobs = n_jobs
         self.stack_datasets = stack_datasets
+        self.outdir = outdir
 
         self._datasets = []
         self._error = False
@@ -76,8 +96,8 @@ class DatasetsMaker(Maker):
             if isinstance(m, SafeMaskMaker):
                 return m
 
-    def make_dataset(self, dataset, observation):
-        """Make single dataset.
+    def prepare_dataset(self, dataset, observation):
+        """Cutout dataset for a given observation.
 
         Parameters
         ----------
@@ -86,38 +106,47 @@ class DatasetsMaker(Maker):
         observation : `Observation`
             Observation
         """
-
         if self._apply_cutout:
             cutouts_kwargs = {
                 "position": observation.pointing_radec.galactic,
                 "width": self.cutout_width,
                 "mode": self.cutout_mode,
+                "name": f"run_{observation.obs_id}",
             }
             dataset_obs = dataset.cutout(
                 **cutouts_kwargs,
             )
         else:
-            dataset_obs = dataset.copy()
+            dataset_obs = dataset.copy(name=f"run_{observation.obs_id}")
+
         if dataset.models is not None:
+            #TODO cutout templates
             models = dataset.models.copy()
             models.reassign(dataset.name, dataset_obs.name)
             dataset_obs.models = models
-
-        log.info(f"Computing dataset for observation {observation.obs_id}")
-        for maker in self.makers:
-            log.info(f"Running {maker.tag}")
-            dataset_obs = maker.run(dataset=dataset_obs, observation=observation)
         return dataset_obs
 
+
     def callback(self, dataset):
-        if self.stack_datasets:
-            if isinstance(self._dataset, MapDataset) and isinstance(
-                dataset, MapDatasetOnOff
-            ):
-                dataset = dataset.to_map_dataset(dataset)
-            self._dataset.stack(dataset)
+        norm = dataset.background_model.spectral_model.norm.value
+        if ~np.isfinite(norm) or norm in [0,1]:
+            print(f"Invalid norm {norm}, skip run stacking")
+            pass
         else:
-            self._datasets.append(dataset)
+            if self.stack_datasets:
+                if isinstance(self._dataset, MapDataset) and isinstance(
+                    dataset, MapDatasetOnOff
+                ):
+                    dataset = dataset.to_map_dataset(dataset)
+                self._dataset.stack(dataset)
+                if self.outdir is not None:
+                    filename = f"{self.outdir}/{dataset.name}_dataset.fits"
+                    if not os.path.isfile(filename):
+                        dataset.write(filename, overwrite=False)
+                    filename = f"{self.outdir}/{dataset.name}_models.yaml"
+                    dataset.models.write(filename, overwrite=True)
+            else:
+                self._datasets.append(dataset)
 
     def error_callback(self, dataset):
         # parallel run could cause a memory error with non-explicit message.
@@ -141,7 +170,7 @@ class DatasetsMaker(Maker):
             Datasets
 
         """
-
+        n_obs = len(observations)
         if isinstance(dataset, MapDataset):
             # also valid for Spectrum as it inherits from MapDataset
             self._dataset = dataset
@@ -154,17 +183,23 @@ class DatasetsMaker(Maker):
         if datasets is not None:
             self._apply_cutout = False
         else:
-            datasets = len(observations) * [dataset]
+            datasets = n_obs * [dataset]
 
         if self.n_jobs is not None and self.n_jobs > 1:
-            n_jobs = min(self.n_jobs, len(observations))
+            n_jobs = min(self.n_jobs, n_obs)
+            ct = 0
+            ct_total = 0
             with Pool(processes=n_jobs) as pool:
                 log.info("Using {} jobs.".format(n_jobs))
                 results = []
-                for base, obs in zip(datasets, observations):
+                for obs in observations:
+                    ct += 1
+                    ct_total += 1
+                    base = self.prepare_dataset(dataset, obs)
                     result = pool.apply_async(
-                        self.make_dataset,
-                        (
+                        make_dataset,
+                        (   
+                            self.makers,
                             base,
                             obs,
                         ),
@@ -172,14 +207,20 @@ class DatasetsMaker(Maker):
                         error_callback=self.error_callback,
                     )
                     results.append(result)
-                # wait async run is done
-                [result.wait() for result in results]
+                    # chunk wait async run is done
+                    # use apply_async instead of starmap_async
+                    # because the callback has to applied at each iteration
+                    if ct==n_jobs or ct_total==n_obs:
+                        [result.wait() for result in results]
+                        results = []
+                        ct = 0
             if self._error:
                 raise RuntimeError("Execution of a sub-process failed")
         else:
-            for base, obs in zip(datasets, observations):
-                dataset = self.make_dataset(base, obs)
-                self.callback(dataset)
+            for obs in observations:
+                base = self.prepare_dataset(dataset, obs)
+                result = make_dataset(self.makers, base, obs)
+                self.callback(result)
 
         if self.stack_datasets:
             return Datasets([self._dataset])
