@@ -3,6 +3,7 @@ from multiprocessing import Pool
 import numpy as np
 from astropy.coordinates import Angle
 from gammapy.datasets import Datasets, MapDataset, MapDatasetOnOff, SpectrumDataset
+from gammapy.modeling.models import Models
 from .core import Maker
 from .safe import SafeMaskMaker
 import os
@@ -52,6 +53,9 @@ class DatasetsMaker(Maker):
         with the offset-max method defined. In that case it is set to two times `offset_max`.
     outdir : str
         If provided the individual datasets will be stored in the given directory. 
+    read_only : bool
+        Only read exiting datasets in `outdir` if exits otherwise perform data-reduction loop.
+        True by default.
     """
 
     tag = "DatasetsMaker"
@@ -63,7 +67,8 @@ class DatasetsMaker(Maker):
         n_jobs=None,
         cutout_mode="trim",
         cutout_width=None,
-        outdir=None
+        outdir=None,
+        read_only=True,
     ):
         self.log = logging.getLogger(__name__)
         self.makers = makers
@@ -80,7 +85,7 @@ class DatasetsMaker(Maker):
         self.n_jobs = n_jobs
         self.stack_datasets = stack_datasets
         self.outdir = outdir
-
+        self.read_only = read_only
         self._datasets = []
         self._error = False
 
@@ -96,6 +101,18 @@ class DatasetsMaker(Maker):
             if isinstance(m, SafeMaskMaker):
                 return m
 
+    def read_dataset(self, observation):
+        if self.outdir is not None:
+            name = f"run_{observation.obs_id}"
+            filename = f"{self.outdir}/{name}_dataset.fits"
+            if os.path.isfile(filename) :
+                dataset_obs = MapDataset.read(filename, name=name)
+                models= Models.read(f"{self.outdir}/run_{observation.obs_id}_models.yaml")
+                dataset_obs.models = models
+                # TODO: write/read datasets yaml instead
+                # otherwise read works only for one datasest type
+                return dataset_obs
+
     def prepare_dataset(self, dataset, observation):
         """Cutout dataset for a given observation.
 
@@ -106,6 +123,7 @@ class DatasetsMaker(Maker):
         observation : `Observation`
             Observation
         """
+        
         if self._apply_cutout:
             cutouts_kwargs = {
                 "position": observation.pointing_radec.galactic,
@@ -129,30 +147,28 @@ class DatasetsMaker(Maker):
 
     def callback(self, dataset):
         norm = dataset.background_model.spectral_model.norm.value
-        if ~np.isfinite(norm) or norm in [0,1]:
-            print(f"Invalid norm {norm}, skip run stacking")
-            pass
+        if ~np.isfinite(norm) or norm in [0, 1]:
+            print(f"Discard {dataset.name}, invalid norm {norm}")
         else:
+            if self.outdir is not None:
+                filename = f"{self.outdir}/{dataset.name}_dataset.fits"
+                if not os.path.isfile(filename):
+                    dataset.write(filename, overwrite=False)
+                filename = f"{self.outdir}/{dataset.name}_models.yaml"
+                dataset.models.write(filename, overwrite=True)
             if self.stack_datasets:
                 if isinstance(self._dataset, MapDataset) and isinstance(
                     dataset, MapDatasetOnOff
                 ):
                     dataset = dataset.to_map_dataset(dataset)
                 self._dataset.stack(dataset)
-                if self.outdir is not None:
-                    filename = f"{self.outdir}/{dataset.name}_dataset.fits"
-                    if not os.path.isfile(filename):
-                        dataset.write(filename, overwrite=False)
-                    filename = f"{self.outdir}/{dataset.name}_models.yaml"
-                    dataset.models.write(filename, overwrite=True)
-            else:
-                self._datasets.append(dataset)
 
     def error_callback(self, dataset):
         # parallel run could cause a memory error with non-explicit message.
         self._error = True
 
-    def run(self, dataset, observations, datasets=None):
+
+    def run(self, dataset, observations):
         """Run data reduction
 
         Parameters
@@ -161,8 +177,6 @@ class DatasetsMaker(Maker):
             Reference dataset (used only for stacking if datasets are provided)
         observations : `Observations`
             Observations
-        datasets : `~gammapy.datasets.Datasets`
-            Base datasets, if provided its length must be the same than the observations.
 
         Returns
         -------
@@ -180,11 +194,6 @@ class DatasetsMaker(Maker):
         if isinstance(dataset, SpectrumDataset):
             self._apply_cutout = False
 
-        if datasets is not None:
-            self._apply_cutout = False
-        else:
-            datasets = n_obs * [dataset]
-
         if self.n_jobs is not None and self.n_jobs > 1:
             n_jobs = min(self.n_jobs, n_obs)
             ct = 0
@@ -193,43 +202,62 @@ class DatasetsMaker(Maker):
                 log.info("Using {} jobs.".format(n_jobs))
                 results = []
                 for obs in observations:
-                    ct += 1
-                    ct_total += 1
-                    base = self.prepare_dataset(dataset, obs)
-                    result = pool.apply_async(
-                        make_dataset,
-                        (   
-                            self.makers,
-                            base,
-                            obs,
-                        ),
-                        callback=self.callback,
-                        error_callback=self.error_callback,
-                    )
-                    results.append(result)
-                    # chunk wait async run is done
-                    # use apply_async instead of starmap_async
-                    # because the callback has to applied at each iteration
-                    if ct==n_jobs or ct_total==n_obs:
-                        [result.wait() for result in results]
-                        results = []
-                        ct = 0
+                    base = self.read_dataset(obs)
+                    if base is not None and self.read_only:
+                        self.callback(base)
+                    else:
+                        try:
+                            obs.bkg # FileNotFoundError ?
+                        except:
+                            continue
+                        ct += 1
+                        ct_total += 1
+                        if base is None :
+                            base = self.prepare_dataset(dataset, obs)
+                            makers = self.makers
+                        elif not self.read_only :
+                            makers = [m for m in self.makers if m.tag == "FoVBackgroundMaker"]                        
+                        result = pool.apply_async(
+                            make_dataset,
+                            (   
+                                makers,
+                                base,
+                                obs,
+                            ),
+                            callback=self.callback,
+                            error_callback=self.error_callback,
+                        )
+                        results.append(result)
+                        # chunk wait async run is done
+                        # use apply_async instead of starmap_async
+                        # because the callback has to applied at each iteration
+                        if ct==n_jobs or ct_total==n_obs:
+                            [result.wait() for result in results]
+                            results = []
+                            ct = 0
             if self._error:
                 raise RuntimeError("Execution of a sub-process failed")
         else:
             for obs in observations:
-                base = self.prepare_dataset(dataset, obs)
-                result = make_dataset(self.makers, base, obs)
-                self.callback(result)
+
+                base = self.read_dataset(obs)
+                if base is not None and self.read_only:
+                    self.callback(base)
+                else:
+                    try:
+                        obs.bkg # FileNotFoundError ?
+                    except:
+                        continue
+                    if base is None :
+                        base = self.prepare_dataset(dataset, obs)
+                        makers = self.makers
+                    elif not self.read_only :
+                        makers = [m for m in self.makers if m.tag == "FoVBackgroundMaker"]                   
+                    result = make_dataset(makers, base, obs)
+                    self.callback(result)
 
         if self.stack_datasets:
             return Datasets([self._dataset])
         else:
-            # have to sort datasets because of async
-            obs_ids = [d.meta_table["OBS_ID"][0] for d in self._datasets]
-            ordered = []
-            for obs in observations:
-                ind = np.where(np.array(obs_ids) == obs.obs_id)[0][0]
-                ordered.append(self._datasets[ind])
-            self._datasets = ordered
-            return Datasets(self._datasets)
+            return None
+

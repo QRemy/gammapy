@@ -108,7 +108,7 @@ class FoVBackgroundMaker(Maker):
 
         if dataset.models is None:
             dataset.models = bkg_model
-        else:
+        elif dataset.background_model is None:
             dataset.models = dataset.models + bkg_model
 
         return dataset
@@ -266,7 +266,8 @@ class FoVBackgroundMaker(Maker):
 
         value = (total["counts"] - not_bkg_tot) / total["bkg"]
         error = np.sqrt(total["counts"] - not_bkg_tot) / total["bkg"]
-        dataset.models[f"{dataset.name}-bkg"].spectral_model.norm.value = value
-        dataset.models[f"{dataset.name}-bkg"].spectral_model.norm.error = error
+        base_value = dataset.models[f"{dataset.name}-bkg"].spectral_model.norm.value
+        dataset.models[f"{dataset.name}-bkg"].spectral_model.norm.value = base_value * value
+        dataset.models[f"{dataset.name}-bkg"].spectral_model.norm.error = base_value * error
 
         return dataset
