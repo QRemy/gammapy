@@ -69,6 +69,7 @@ class DatasetsMaker(Maker):
         cutout_width=None,
         outdir=None,
         read_only=True,
+        skip_missing=False,
     ):
         self.log = logging.getLogger(__name__)
         self.makers = makers
@@ -86,6 +87,7 @@ class DatasetsMaker(Maker):
         self.stack_datasets = stack_datasets
         self.outdir = outdir
         self.read_only = read_only
+        self.skip_missing = skip_missing
         self._datasets = []
         self._error = False
 
@@ -107,11 +109,15 @@ class DatasetsMaker(Maker):
             filename = f"{self.outdir}/{name}_dataset.fits"
             if os.path.isfile(filename) :
                 dataset_obs = MapDataset.read(filename, name=name)
-                models= Models.read(f"{self.outdir}/run_{observation.obs_id}_models.yaml")
+            else :
+                return None
+            filename = f"{self.outdir}/run_{observation.obs_id}_models.yaml"
+            if os.path.isfile(filename) :
+                models= Models.read(filename)
                 dataset_obs.models = models
                 # TODO: write/read datasets yaml instead
                 # otherwise read works only for one datasest type
-                return dataset_obs
+            return dataset_obs
 
     def prepare_dataset(self, dataset, observation):
         """Cutout dataset for a given observation.
@@ -146,16 +152,22 @@ class DatasetsMaker(Maker):
 
 
     def callback(self, dataset):
-        norm = dataset.background_model.spectral_model.norm.value
-        if ~np.isfinite(norm) or norm in [0, 1]:
-            print(f"Discard {dataset.name}, invalid norm {norm}")
-        else:
+        validnorm = True
+        hasnorm = dataset.background_model is not None
+        if hasnorm :
+            norm = dataset.background_model.spectral_model.norm.value
+            if ~np.isfinite(norm) or norm in [0, 1]:
+                validnorm = False
+                print(f"Discard {dataset.name}, invalid norm {norm}")
+            elif self.outdir is not None:
+                filename = f"{self.outdir}/{dataset.name}_models.yaml"
+                dataset.models.write(filename, overwrite=True)
+        if validnorm:
             if self.outdir is not None:
                 filename = f"{self.outdir}/{dataset.name}_dataset.fits"
                 if not os.path.isfile(filename):
                     dataset.write(filename, overwrite=False)
-                filename = f"{self.outdir}/{dataset.name}_models.yaml"
-                dataset.models.write(filename, overwrite=True)
+
             if self.stack_datasets:
                 if isinstance(self._dataset, MapDataset) and isinstance(
                     dataset, MapDatasetOnOff
@@ -248,9 +260,12 @@ class DatasetsMaker(Maker):
                         obs.bkg # FileNotFoundError ?
                     except:
                         continue
-                    if base is None :
-                        base = self.prepare_dataset(dataset, obs)
-                        makers = self.makers
+                    if base is None:
+                        if self.skip_missing :
+                            continue
+                        else:
+                            base = self.prepare_dataset(dataset, obs)
+                            makers = self.makers
                     elif not self.read_only :
                         makers = [m for m in self.makers if m.tag == "FoVBackgroundMaker"]                   
                     result = make_dataset(makers, base, obs)

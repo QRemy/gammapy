@@ -49,6 +49,7 @@ class SafeMaskMaker(Maker):
         "edisp-bias",
         "offset-max",
         "bkg-peak",
+        "bkg-percentile"
     }
 
     def __init__(
@@ -56,6 +57,7 @@ class SafeMaskMaker(Maker):
         methods=("aeff-default",),
         aeff_percent=10,
         bias_percent=10,
+        bkg_percent=99,
         position=None,
         fixed_offset=None,
         offset_max="3 deg",
@@ -69,6 +71,7 @@ class SafeMaskMaker(Maker):
         self.methods = methods
         self.aeff_percent = aeff_percent
         self.bias_percent = bias_percent
+        self.bkg_percent = bkg_percent
         self.position = position
         self.fixed_offset = fixed_offset
         self.offset_max = Angle(offset_max)
@@ -259,6 +262,38 @@ class SafeMaskMaker(Maker):
         energy_min = energy_axis.edges[idx]
         return geom.energy_mask(energy_min=energy_min)
 
+
+    def make_mask_energy_bkg_percentile(self, dataset):
+        """Make safe energy mask based on the binned background.
+
+        The energy threshold is defined as the lower edge of the energy
+        bin with the highest value at a given percentile thrheshold in predicted background rate.
+        Background values larger than this percentile are also masked.
+        This is prevent outliers to be marked as the peak for noisy background.
+
+        Parameters
+        ----------
+        dataset : `~gammapy.datasets.MapDataset` or `~gammapy.datasets.SpectrumDataset`
+            Dataset to compute mask for.
+
+        Returns
+        -------
+        mask_safe : `~numpy.ndarray`
+            Safe data range mask.
+        """
+        geom = dataset._geom
+
+        background = dataset.npred_background().data
+       
+        percentile_mask = background<np.percentile(background, self.bkg_percent)
+        mask = Map.from_geom(geom, data=percentile_mask, dtype=bool)
+    
+        idx = np.argmax(np.percentile(background, self.bkg_percent, axis=(1,2)))
+        energy_axis = geom.axes["energy"]
+        energy_min = energy_axis.edges[idx]
+        mask &= geom.energy_mask(energy_min=energy_min)
+        return mask
+
     @staticmethod
     def make_mask_bkg_invalid(dataset):
         """Mask non-finite values and zeros values in background maps.
@@ -320,6 +355,9 @@ class SafeMaskMaker(Maker):
 
         if "bkg-peak" in self.methods:
             mask_safe &= self.make_mask_energy_bkg_peak(dataset)
+            
+        if "bkg-percentile" in self.methods:
+            mask_safe &= self.make_mask_energy_bkg_percentile(dataset)
 
         dataset.mask_safe = Map.from_geom(dataset._geom, data=mask_safe, dtype=bool)
         return dataset

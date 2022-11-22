@@ -34,6 +34,10 @@ class MapDatasetMaker(Maker):
     background_interp_missing_data: bool
         Interpolate missing values in background 3d map.
         Default is True, have to be set to True for CTA IRF.
+    background_pad_offset: bool
+        Pad one bin in offset for 2d background map.
+        This avoid extrapolation at edges and use the nearest value.
+        Default is True.
 
     Examples
     --------
@@ -90,13 +94,15 @@ class MapDatasetMaker(Maker):
     available_selection = ["counts", "exposure", "background", "psf", "edisp"]
 
     def __init__(
-        self,
-        selection=None,
-        background_oversampling=None,
-        background_interp_missing_data=True,
+            self,
+            selection=None,
+            background_oversampling=None,
+            background_interp_missing_data=True,
+            background_pad_offset=True,
     ):
         self.background_oversampling = background_oversampling
         self.background_interp_missing_data = background_interp_missing_data
+        self.background_pad_offset = background_pad_offset
         if selection is None:
             selection = self.available_selection
 
@@ -214,6 +220,9 @@ class MapDatasetMaker(Maker):
 
         if self.background_interp_missing_data:
             bkg.interp_missing_data(axis_name="energy")
+
+        if self.background_pad_offset and bkg.has_offset_axis:
+            bkg = bkg.pad(1, mode="edge", axis_name="offset")
 
         return make_map_background_irf(
             pointing=observation.fixed_pointing_info,
