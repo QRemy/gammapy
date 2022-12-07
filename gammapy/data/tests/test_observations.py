@@ -6,6 +6,7 @@ import astropy.units as u
 from astropy.coordinates import EarthLocation, SkyCoord
 from astropy.time import Time
 from astropy.units import Quantity
+from gammapy.maps import MapCoord
 from gammapy.data import DataStore, Observation
 from gammapy.irf import PSF3D, load_cta_irfs
 from gammapy.utils.fits import HDULocation
@@ -386,3 +387,39 @@ def test_obervation_copy(data_store):
     obs_copy = obs.copy(obs_id=1234, in_memory=True)
     assert isinstance(obs_copy.__dict__["psf"], PSF3D)
     assert obs_copy.obs_id == 1234
+
+
+@requires_data()
+def test_observations_clustering(data_store):
+
+    selection = dict(
+        type="sky_circle",
+        frame="icrs",
+        lon="83.633 deg",
+        lat="22.014 deg",
+        radius="2 deg",
+    )
+    obs_table = data_store.obs_table.select_observations(selection)
+    observations = data_store.get_observations(obs_table["OBS_ID"])
+
+    coord_dict = dict(lon=83.63308, lat=22.01450, energy_true="1 TeV")
+    coord = MapCoord(coord_dict, frame="icrs")
+    names = ["edisp-bias", "edisp-res", "psf-radius"]
+    features = observations.get_features(coord, names)
+
+    n_features = len(names)
+    assert features.shape == (len(observations), n_features)
+
+    obs_clusters, ind_clusters, features = observations.hierarchical_clustering(
+        features, standard_scaler=True
+    )
+
+    for k in range(n_features):
+        assert_allclose(features[:, k].mean(), 0, atol=1e-7)
+        assert_allclose(features[:, k].std(), 1, atol=1e-7)
+
+    assert np.all(ind_clusters == np.array([2, 1, 1, 1]))
+
+    assert len(obs_clusters[0]) == 3
+    assert len(obs_clusters[1]) == 1
+    assert obs_clusters[1][0].obs_id == 23523
