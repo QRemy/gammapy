@@ -7,6 +7,7 @@ from astropy.coordinates import EarthLocation, SkyCoord
 from astropy.time import Time
 from astropy.units import Quantity
 from gammapy.data import DataStore, Observation
+from gammapy.data.utils import get_irfs_features
 from gammapy.estimators.utils import hierarchical_clustering
 from gammapy.irf import PSF3D, load_cta_irfs
 from gammapy.maps import MapCoord
@@ -406,7 +407,7 @@ def test_observations_clustering(data_store):
     coord_dict = dict(lon=83.63308, lat=22.01450, energy_true="1 TeV")
     coord = MapCoord(coord_dict, frame="icrs")
     names = ["edisp-bias", "edisp-res", "psf-radius"]
-    features = observations.get_features(coord, names)
+    features = get_irfs_features(observations, coord, names)
 
     n_features = len(names)
     assert features.shape == (len(observations), n_features)
