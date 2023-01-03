@@ -8,9 +8,9 @@ from astropy.time import Time
 from astropy.units import Quantity
 from gammapy.data import DataStore, Observation
 from gammapy.data.utils import get_irfs_features
-from gammapy.estimators.utils import hierarchical_clustering
 from gammapy.irf import PSF3D, load_cta_irfs
 from gammapy.maps import MapCoord
+from gammapy.utils.cluster import hierarchical_clustering
 from gammapy.utils.fits import HDULocation
 from gammapy.utils.testing import (
     assert_skycoord_allclose,
