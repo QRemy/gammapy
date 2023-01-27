@@ -1656,8 +1656,8 @@ class TemplateSpectralModel(SpectralModel):
         data = data["spectral"]
         energy = u.Quantity(data["energy"]["data"], data["energy"]["unit"])
         values = u.Quantity(data["values"]["data"], data["values"]["unit"])
-        norm = [p["value"] for p in data["parameters"] if p["name"] == "norm"][0]
-        return cls(energy=energy, values=values, norm=norm)
+        #        norm = [p["value"] for p in data["parameters"] if p["name"] == "norm"][0]
+        return cls(energy=energy, values=values)  # , norm=norm)
 
     @classmethod
     def from_region_map(cls, map, **kwargs):
