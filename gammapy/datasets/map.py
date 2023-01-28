@@ -1583,16 +1583,10 @@ class MapDataset(Dataset):
             kwargs["background"] = self.background.cutout(**cutout_kwargs)
 
         if self.edisp is not None:
-            cutout_kwargs_edisp = cutout_kwargs.copy()
-            edisp_width = self.edisp.edisp_map.geom.pixel_scales.max()
-            cutout_kwargs_edisp["width"] = np.maximum(width, edisp_width)
-            kwargs["edisp"] = self.edisp.cutout(**cutout_kwargs_edisp)
+            kwargs["edisp"] = self.edisp.cutout(**cutout_kwargs)
 
         if self.psf is not None:
-            cutout_kwargs_psf = cutout_kwargs.copy()
-            psf_width = self.psf.psf_map.geom.pixel_scales.max()
-            cutout_kwargs_psf["width"] = np.maximum(width, psf_width)
-            kwargs["psf"] = self.psf.cutout(**cutout_kwargs_psf)
+            kwargs["psf"] = self.psf.cutout(**cutout_kwargs)
 
         if self.mask_safe is not None:
             kwargs["mask_safe"] = self.mask_safe.cutout(**cutout_kwargs)
