@@ -92,7 +92,7 @@ class MapEvaluator:
         self._renorm = 1
         self._spatial_oversampling_factor = 1
         if self.exposure is not None:
-            if not self.geom.is_region or self.geom.region is None:
+            if not self.geom.is_region or self.geom.region is not None:
                 self.update_spatial_oversampling_factor(self.geom)
 
     def reset_cache_properties(self):
@@ -207,7 +207,7 @@ class MapEvaluator:
             self.exposure = exposure
 
         if self.contributes:
-            if not self.geom.is_region or self.geom.region is None:
+            if not self.geom.is_region or self.geom.region is not None:
                 self.update_spatial_oversampling_factor(self.geom)
 
         self.reset_cache_properties()
