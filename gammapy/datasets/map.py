@@ -2,7 +2,6 @@
 import logging
 import numpy as np
 import astropy.units as u
-from astropy.coordinates import Angle
 from astropy.io import fits
 from astropy.table import Table
 from regions import CircleSkyRegion
@@ -1586,13 +1585,13 @@ class MapDataset(Dataset):
         if self.edisp is not None:
             cutout_kwargs_edisp = cutout_kwargs.copy()
             edisp_width = self.edisp.edisp_map.geom.pixel_scales.max()
-            cutout_kwargs_edisp["width"] = np.maximum(Angle(list(width)), edisp_width)
+            cutout_kwargs_edisp["width"] = np.maximum(width, edisp_width)
             kwargs["edisp"] = self.edisp.cutout(**cutout_kwargs_edisp)
 
         if self.psf is not None:
             cutout_kwargs_psf = cutout_kwargs.copy()
             psf_width = self.psf.psf_map.geom.pixel_scales.max()
-            cutout_kwargs_psf["width"] = np.maximum(Angle(list(width)), psf_width)
+            cutout_kwargs_psf["width"] = np.maximum(width, psf_width)
             kwargs["psf"] = self.psf.cutout(**cutout_kwargs_psf)
 
         if self.mask_safe is not None:
