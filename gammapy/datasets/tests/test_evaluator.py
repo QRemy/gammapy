@@ -247,10 +247,13 @@ def test_norm_only_changed():
 
     spectral_model.amplitude.value *= 2
     assert evaluator.parameter_norm_only_changed
+    _ = evaluator.compute_npred()
 
     spectral_model.index.value *= 2
     assert not evaluator.parameter_norm_only_changed
+    _ = evaluator.compute_npred()
 
     spectral_model.amplitude.value *= 2
     spectral_model.index.value *= 2
     assert not evaluator.parameter_norm_only_changed
+    _ = evaluator.compute_npred()

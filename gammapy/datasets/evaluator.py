@@ -85,7 +85,6 @@ class MapEvaluator:
 
         # define cached computations
         self._cached_parameter_values = None
-        self._cached_parameter_values_previous = None
         self._cached_parameter_values_spatial = None
         self._cached_position = (0, 0)
         self._computation_cache = None
@@ -366,6 +365,8 @@ class MapEvaluator:
                 npred = self._computation_cache
             else:
                 npred = self._computation_cache * self.renorm()
+                self._computation_cache = npred
+            self._cached_parameter_values = self.model.parameters.value
         return npred
 
     @property
@@ -394,10 +395,6 @@ class MapEvaluator:
 
         # TODO: possibly allow for a tolerance here?
         changed = ~np.all(self._cached_parameter_values == values)
-
-        if changed:
-            self._cached_parameter_values = values
-
         return changed
 
     @property
@@ -407,11 +404,9 @@ class MapEvaluator:
         idx = self._norm_idx
         values = self.model.parameters.value
         if idx is not None and self._computation_cache is not None:
-            changed = self._cached_parameter_values_previous != values
+            changed = self._cached_parameter_values != values
             norm_only_changed = np.count_nonzero(changed) == 1 and changed[idx]
 
-        if not norm_only_changed:
-            self._cached_parameter_values_previous = values
         return norm_only_changed
 
     def parameters_spatial_changed(self, reset=True):
@@ -467,8 +462,11 @@ class MapEvaluator:
             return None
 
     def renorm(self):
-        value = self.model.parameters.value[self._norm_idx]
-        value_cached = self._cached_parameter_values_previous[self._norm_idx]
+        if self._cached_parameter_values is None:
+            return 1.0
+        else:
+            value = self.model.parameters.value[self._norm_idx]
+            value_cached = self._cached_parameter_values[self._norm_idx]
         return value / value_cached
 
     @lazyproperty
