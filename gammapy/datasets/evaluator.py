@@ -88,8 +88,6 @@ class MapEvaluator:
         self._cached_parameter_values_spatial = None
         self._cached_position = (0, 0)
         self._computation_cache = None
-        self._neval = 0  # for debugging
-        self._renorm = 1
         self._spatial_oversampling_factor = 1
         if self.exposure is not None:
             if not self.geom.is_region or self.geom.region is not None:
@@ -358,14 +356,13 @@ class MapEvaluator:
         if isinstance(self.model, TemplateNPredModel):
             npred = self.model.evaluate()
         else:
-            if not self.parameter_norm_only_changed:
+            if not self.parameter_norm_only_changed or not self.use_cache:
                 for method in self.methods_sequence:
                     values = method(self._computation_cache)
                     self._computation_cache = values
-                npred = self._computation_cache
             else:
-                npred = self._computation_cache * self.renorm()
-                self._computation_cache = npred
+                self._computation_cache *= self.renorm()
+            npred = self._computation_cache
             self._cached_parameter_values = self.model.parameters.value
         return npred
 
