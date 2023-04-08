@@ -114,6 +114,11 @@ class DatasetsMaker(Maker):
             filename = f"{self.outdir}/run_{observation.obs_id}_models.yaml"
             if os.path.isfile(filename) :
                 models= Models.read(filename)
+                if self._dataset.models is not None and not self.read_only:
+                    #TODO cutout templates
+                    new_models = self._dataset.models.copy()
+                    new_models.reassign(self._dataset.name, dataset_obs.name)
+                    models = models + Models(new_models)
                 dataset_obs.models = models
                 # TODO: write/read datasets yaml instead
                 # otherwise read works only for one datasest type
