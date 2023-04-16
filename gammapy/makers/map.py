@@ -364,7 +364,8 @@ class MapDatasetMaker(Maker):
         mask_safe.data[...] = True
 
         kwargs["mask_safe"] = mask_safe
-
+        kwargs["models"] = dataset.models
+        
         if "counts" in self.selection:
             counts = self.make_counts(dataset.counts.geom, observation)
         else:

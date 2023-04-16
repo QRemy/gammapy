@@ -272,7 +272,7 @@ class DatasetsMaker(Maker):
                             base = self.prepare_dataset(dataset, obs)
                             makers = self.makers
                     elif not self.read_only :
-                        makers = [m for m in self.makers if m.tag == "FoVBackgroundMaker"]                   
+                        makers = [m for m in self.makers if m.tag == "FoVBackgroundMaker"]  
                     result = make_dataset(makers, base, obs)
                     self.callback(result)
 
