@@ -157,28 +157,23 @@ class DatasetsMaker(Maker):
 
 
     def callback(self, dataset):
-        validnorm = True
-        hasnorm = dataset.background_model is not None
-        if hasnorm :
-            norm = dataset.background_model.spectral_model.norm.value
-            if ~np.isfinite(norm) or norm in [0, 1]:
-                validnorm = False
-                print(f"Discard {dataset.name}, invalid norm {norm}")
-            elif self.outdir is not None:
-                filename = f"{self.outdir}/{dataset.name}_models.yaml"
-                dataset.models.write(filename, overwrite=True)
-        if validnorm:
-            if self.outdir is not None:
-                filename = f"{self.outdir}/{dataset.name}_dataset.fits"
-                if not os.path.isfile(filename):
-                    dataset.write(filename, overwrite=False)
+        isvalid = np.any(dataset.mask_safe.data)
+        if not isvalid :
+            print(f"Discard {dataset.name}, empty mask")
+        elif self.outdir is not None:
+            filename = f"{self.outdir}/{dataset.name}_models.yaml"
+            dataset.models.write(filename, overwrite=True)
 
-            if self.stack_datasets:
-                if isinstance(self._dataset, MapDataset) and isinstance(
-                    dataset, MapDatasetOnOff
-                ):
-                    dataset = dataset.to_map_dataset(dataset)
-                self._dataset.stack(dataset)
+            filename = f"{self.outdir}/{dataset.name}_dataset.fits"
+            if not os.path.isfile(filename):
+                dataset.write(filename, overwrite=False)
+
+        if isvalid and self.stack_datasets:
+            if isinstance(self._dataset, MapDataset) and isinstance(
+                dataset, MapDatasetOnOff
+            ):
+                dataset = dataset.to_map_dataset(dataset)
+            self._dataset.stack(dataset)
 
     def error_callback(self, dataset):
         # parallel run could cause a memory error with non-explicit message.
