@@ -2,6 +2,7 @@ import logging
 from multiprocessing import Pool
 import numpy as np
 from astropy.coordinates import Angle
+from gammapy.maps import Map
 from gammapy.datasets import Datasets, MapDataset, MapDatasetOnOff, SpectrumDataset
 from gammapy.modeling.models import Models
 from .core import Maker
@@ -111,17 +112,20 @@ class DatasetsMaker(Maker):
                 dataset_obs = MapDataset.read(filename, name=name)
             else :
                 return None
+            # TODO: write/read datasets yaml instead
+            # otherwise read works only for one datasest type
+                
             filename = f"{self.outdir}/run_{observation.obs_id}_models.yaml"
-            if os.path.isfile(filename) :
-                models= Models.read(filename)
-                if self._dataset.models is not None and not self.read_only:
-                    #TODO cutout templates
-                    new_models = self._dataset.models.copy()
-                    new_models.reassign(self._dataset.name, dataset_obs.name)
-                    models = models + Models(new_models)
-                dataset_obs.models = models
-                # TODO: write/read datasets yaml instead
-                # otherwise read works only for one datasest type
+            if self._dataset.models is not None and not self.read_only:
+                #TODO cutout templates
+                models = self._dataset.models.copy()
+                models.reassign(self._dataset.name, dataset_obs.name)
+            elif os.path.isfile(filename) and self.read_only:
+                models = Models.read(filename)
+            else:
+                models=Models([])
+            dataset_obs.models = models
+            #print(models.names)
             return dataset_obs
 
     def prepare_dataset(self, dataset, observation):
@@ -153,6 +157,7 @@ class DatasetsMaker(Maker):
             models = dataset.models.copy()
             models.reassign(dataset.name, dataset_obs.name)
             dataset_obs.models = models
+            #print(models.names)
         return dataset_obs
 
 
@@ -160,13 +165,16 @@ class DatasetsMaker(Maker):
         isvalid = np.any(dataset.mask_safe.data)
         if not isvalid :
             print(f"Discard {dataset.name}, empty mask")
-        elif self.outdir is not None:
-            filename = f"{self.outdir}/{dataset.name}_models.yaml"
+        elif self.outdir is not None and not self.read_only:
+            filename = f"{self.outdir}/{dataset.name}_models_full.yaml"
             dataset.models.write(filename, overwrite=True)
 
+            filename = f"{self.outdir}/{dataset.name}_models.yaml"
+            bkg = Models([dataset.background_model])
+            bkg.write(filename, overwrite=True, write_covariance=False)
+
             filename = f"{self.outdir}/{dataset.name}_dataset.fits"
-            if not os.path.isfile(filename):
-                dataset.write(filename, overwrite=False)
+            dataset.write(filename, overwrite=True)
 
         if isvalid and self.stack_datasets:
             if isinstance(self._dataset, MapDataset) and isinstance(
@@ -228,7 +236,8 @@ class DatasetsMaker(Maker):
                             base = self.prepare_dataset(dataset, obs)
                             makers = self.makers
                         elif not self.read_only :
-                            makers = [m for m in self.makers if m.tag == "FoVBackgroundMaker"]                        
+                            base.mask_safe = Map.from_geom(base.mask_safe.geom,data=True)
+                            makers = [m for m in self.makers if m.tag in ["FoVBackgroundMaker","SafeMaskMaker"]]                       
                         result = pool.apply_async(
                             make_dataset,
                             (   
@@ -267,7 +276,8 @@ class DatasetsMaker(Maker):
                             base = self.prepare_dataset(dataset, obs)
                             makers = self.makers
                     elif not self.read_only :
-                        makers = [m for m in self.makers if m.tag == "FoVBackgroundMaker"]  
+                        base.mask_safe = Map.from_geom(base.mask_safe.geom,data=True)
+                        makers = [m for m in self.makers if m.tag in ["FoVBackgroundMaker","SafeMaskMaker"]]                       
                     result = make_dataset(makers, base, obs)
                     self.callback(result)
 
