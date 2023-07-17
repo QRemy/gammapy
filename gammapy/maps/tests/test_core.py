@@ -747,6 +747,48 @@ def test_map_reproject_by_slice():
     )
     assert_allclose(actual, [287.5, 1055.5, 1823.5], rtol=1e-3)
 
+    m = HpxNDMap(geom_hpx, data=data, n_jobs=3)
+    assert m.n_jobs == 3
+    m_r = m.reproject_by_slice(geom_wcs)
+    actual = m_r.get_by_coord(
+        {"lon": 0, "lat": 0, "energy_true": [1.0, 3.16227766, 10.0]}
+    )
+    assert_allclose(actual, [287.5, 1055.5, 1823.5], rtol=1e-3)
+
+
+def test_map_reproject_by_slice_ray():
+    axis = MapAxis.from_bounds(
+        1.0, 10.0, 3, interp="log", name="energy_true", node_type="center"
+    )
+    geom_wcs = WcsGeom.create(skydir=(0, 0), npix=(11, 11), binsz=10, frame="galactic")
+
+    geom_hpx = HpxGeom.create(binsz=10, frame="galactic", axes=[axis])
+
+    data = np.arange(3 * 768).reshape(geom_hpx.data_shape)
+    m = HpxNDMap(geom_hpx, data=data, n_jobs=3, parallel_backend="ray")
+    assert m.n_jobs == 3
+    assert m.parallel_backend == "ray"
+
+    m_r = m.reproject_by_slice(geom_wcs)
+    actual = m_r.get_by_coord(
+        {"lon": 0, "lat": 0, "energy_true": [1.0, 3.16227766, 10.0]}
+    )
+    assert_allclose(actual, [287.5, 1055.5, 1823.5], rtol=1e-3)
+
+    data = np.arange(3 * 768).reshape(geom_hpx.data_shape)
+    m = HpxNDMap(geom_hpx, data=data, n_jobs=3, parallel_backend="ray")
+    assert m.n_jobs == 3
+    assert m.parallel_backend == "ray"
+
+    m_2 = Map.from_geom(m_r.geom, data=m_r.data, n_jobs=3, parallel_backend="ray")
+    assert m_2.n_jobs == 3
+    assert m_2.parallel_backend == "ray"
+    m_r = m_2.reproject_by_slice(geom_wcs)
+    actual = m_r.get_by_coord(
+        {"lon": 0, "lat": 0, "energy_true": [1.0, 3.16227766, 10.0]}
+    )
+    assert_allclose(actual, [287.5, 1055.5, 1823.5], rtol=1e-3)
+
 
 def test_wcsndmap_reproject_allsky_car():
     geom = WcsGeom.create(binsz=10.0, proj="CAR", frame="icrs")
