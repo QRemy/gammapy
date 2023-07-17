@@ -15,7 +15,11 @@ from gammapy.maps import (
     WcsGeom,
     WcsNDMap,
 )
-from gammapy.utils.testing import modify_unit_order_astropy_5_3, mpl_plot_check
+from gammapy.utils.testing import (
+    modify_unit_order_astropy_5_3,
+    mpl_plot_check,
+    requires_dependency,
+)
 
 pytest.importorskip("healpy")
 
@@ -756,6 +760,7 @@ def test_map_reproject_by_slice():
     assert_allclose(actual, [287.5, 1055.5, 1823.5], rtol=1e-3)
 
 
+@requires_dependency("ray")
 def test_map_reproject_by_slice_ray():
     axis = MapAxis.from_bounds(
         1.0, 10.0, 3, interp="log", name="energy_true", node_type="center"
