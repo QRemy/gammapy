@@ -6,10 +6,11 @@ from astropy import units as u
 from astropy.coordinates import EarthLocation, SkyCoord
 from astropy.table import Table
 from gammapy.data import Observation
+from gammapy.data.pointing import FixedPointingInfo, PointingMode
 from gammapy.datasets import MapDataset, SpectrumDatasetOnOff
 from gammapy.datasets.spectrum import SpectrumDataset
 from gammapy.estimators import FluxPoints, FluxPointsEstimator
-from gammapy.irf import EDispKernelMap, EffectiveAreaTable2D, load_cta_irfs
+from gammapy.irf import EDispKernelMap, EffectiveAreaTable2D, load_irf_dict_from_file
 from gammapy.makers import MapDatasetMaker
 from gammapy.makers.utils import make_map_exposure_true_energy
 from gammapy.maps import MapAxis, RegionGeom, RegionNDMap, WcsGeom
@@ -96,11 +97,12 @@ def create_fpe(model):
 
 
 def simulate_map_dataset(random_state=0, name=None):
-    irfs = load_cta_irfs(
+    irfs = load_irf_dict_from_file(
         "$GAMMAPY_DATA/cta-1dc/caldb/data/cta/1dc/bcf/South_z20_50h/irf_file.fits"
     )
 
     skydir = SkyCoord("0 deg", "0 deg", frame="galactic")
+    pointing = FixedPointingInfo(mode=PointingMode.POINTING, fixed_icrs=skydir.icrs)
     energy_edges = np.logspace(-1, 2, 15) * u.TeV
     energy_axis = MapAxis.from_edges(edges=energy_edges, name="energy", interp="log")
 
@@ -115,7 +117,7 @@ def simulate_map_dataset(random_state=0, name=None):
     skymodel = SkyModel(spatial_model=gauss, spectral_model=pwl, name="source")
 
     obs = Observation.create(
-        pointing=skydir,
+        pointing=pointing,
         livetime=1 * u.h,
         irfs=irfs,
         location=EarthLocation(lon="-70d18m58.84s", lat="-24d41m0.34s", height="2000m"),

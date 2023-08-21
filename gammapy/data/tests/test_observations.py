@@ -11,6 +11,8 @@ from gammapy.data.utils import get_irfs_features
 from gammapy.irf import PSF3D, load_cta_irfs
 from gammapy.maps import MapCoord
 from gammapy.utils.cluster import hierarchical_clustering
+from gammapy.data.pointing import FixedPointingInfo, PointingMode
+from gammapy.utils.deprecation import GammapyDeprecationWarning
 from gammapy.utils.fits import HDULocation
 from gammapy.utils.testing import (
     assert_skycoord_allclose,
@@ -34,10 +36,14 @@ def test_observation(data_store):
     assert_time_allclose(obs.tstop, Time(53343.94186555556, scale="tt", format="mjd"))
 
     c = SkyCoord(83.63333129882812, 21.51444435119629, unit="deg")
-    assert_skycoord_allclose(obs.pointing_radec, c)
+    assert_skycoord_allclose(obs.get_pointing_icrs(obs.tmid), c)
+    with pytest.warns(GammapyDeprecationWarning):
+        assert_skycoord_allclose(obs.pointing_radec, c)
 
     c = SkyCoord(22.558341, 41.950807, unit="deg")
-    assert_skycoord_allclose(obs.pointing_altaz, c)
+    assert_skycoord_allclose(obs.get_pointing_altaz(obs.tmid), c)
+    with pytest.warns(GammapyDeprecationWarning):
+        assert_skycoord_allclose(obs.pointing_altaz, c)
 
     c = SkyCoord(83.63333129882812, 22.01444435119629, unit="deg")
     assert_skycoord_allclose(obs.target_radec, c)
@@ -221,8 +227,11 @@ def test_observations_select_time_time_intervals_list(data_store):
 @requires_data()
 def test_observation_cta_1dc():
     ontime = 5.0 * u.hr
-    pointing = SkyCoord(0, 0, unit="deg", frame="galactic")
-    irfs = load_cta_irfs(
+    pointing = FixedPointingInfo(
+        mode=PointingMode.POINTING,
+        fixed_icrs=SkyCoord(0, 0, unit="deg", frame="galactic").icrs,
+    )
+    irfs = load_irf_dict_from_file(
         "$GAMMAPY_DATA/cta-1dc/caldb/data/cta/1dc/bcf/South_z20_50h/irf_file.fits"
     )
 
@@ -240,16 +249,20 @@ def test_observation_cta_1dc():
         location=location,
     )
 
-    assert_skycoord_allclose(obs.pointing_radec, pointing.icrs)
+    assert_skycoord_allclose(obs.get_pointing_icrs(obs.tmid), pointing.fixed_icrs)
     assert_allclose(obs.observation_live_time_duration, 0.9 * ontime)
     assert_allclose(obs.target_radec.ra, np.nan)
-    assert not np.isnan(obs.pointing_zen)
+    with pytest.warns(GammapyDeprecationWarning):
+        assert not np.isnan(obs.pointing_zen)
     assert_allclose(obs.muoneff, 1)
 
 
 @requires_data()
 def test_observation_create_radmax():
-    pointing = SkyCoord(0, 0, unit="deg", frame="galactic")
+    pointing = FixedPointingInfo(
+        mode=PointingMode.POINTING,
+        fixed_icrs=SkyCoord(0, 0, unit="deg", frame="galactic").icrs,
+    )
     obs = Observation.read("$GAMMAPY_DATA/joint-crab/dl3/magic/run_05029748_DL3.fits")
     livetime = 5.0 * u.hr
     deadtime = 0.5
@@ -265,7 +278,7 @@ def test_observation_create_radmax():
         livetime=livetime,
     )
 
-    assert_skycoord_allclose(obs1.pointing_radec, pointing.icrs)
+    assert_skycoord_allclose(obs1.get_pointing_icrs(obs1.tmid), pointing.fixed_icrs)
     assert_allclose(obs1.observation_live_time_duration, 0.5 * livetime)
     assert obs1.rad_max is not None
     assert obs1.psf is None
@@ -440,3 +453,16 @@ def test_observations_clustering(data_store):
     assert len(obs_clusters[0]) == 3
     assert len(obs_clusters[1]) == 1
     assert obs_clusters[1][0].obs_id == 23523
+
+
+def test_observation_tmid():
+    from gammapy.data import GTI
+
+    start = Time("2020-01-01T20:00:00")
+    stop = Time("2020-01-01T20:10:00")
+    expected = Time("2020-01-01T20:05:00")
+    epoch = Time("2020-01-01T00:00:00")
+
+    gti = GTI.create([(start - epoch).to(u.s)], [(stop - epoch).to(u.s)], epoch)
+    obs = Observation(gti=gti)
+    assert abs(obs.tmid - expected).to(u.ns) < 1 * u.us

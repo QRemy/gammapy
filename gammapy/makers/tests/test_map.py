@@ -11,9 +11,11 @@ from gammapy.data import (
     GTI,
     DataStore,
     EventList,
+    FixedPointingInfo,
     HDUIndexTable,
     Observation,
     ObservationTable,
+    PointingMode,
 )
 from gammapy.datasets import MapDataset
 from gammapy.datasets.map import RAD_AXIS_DEFAULT
@@ -148,7 +150,7 @@ def test_map_maker(pars, observations):
     safe_mask_maker = SafeMaskMaker(methods=["offset-max"], offset_max="2 deg")
 
     for obs in observations:
-        cutout = stacked.cutout(position=obs.pointing_radec, width="4 deg")
+        cutout = stacked.cutout(position=obs.get_pointing_icrs(obs.tmid), width="4 deg")
         dataset = maker.run(cutout, obs)
         dataset = safe_mask_maker.run(dataset, obs)
         stacked.stack(dataset)
@@ -350,7 +352,6 @@ def test_interpolate_map_dataset():
     # define observation
     obs = Observation(
         obs_id=0,
-        obs_info={"RA_PNT": 0.0, "DEC_PNT": 0.0},
         gti=gti,
         aeff=aeff_map,
         edisp=edispmap,
@@ -358,6 +359,9 @@ def test_interpolate_map_dataset():
         bkg=bkg_map,
         events=events,
         obs_filter=None,
+        pointing=FixedPointingInfo(
+            mode=PointingMode.POINTING, fixed_icrs=SkyCoord(0 * u.deg, 0 * u.deg)
+        ),
     )
 
     # define analysis geometry
