@@ -177,10 +177,15 @@ def contour_iminuit(parameters, function, x, y, numpoints, sigma, **kwargs):
 
 # this code is copied from https://github.com/iminuit/iminuit/blob/master/iminuit/_minimize.py#L95
 def _get_message(m, parameters):
-    message = "Optimization terminated successfully."
-    success = m.accurate
+    success = m.valid
     success &= np.all(np.isfinite([par.value for par in parameters]))
-    if not success:
+    if success:
+        message = "Optimization terminated successfully."
+        if m.accurate:
+            message += "."
+        else:
+            message += ", but uncertainties are unreliable."
+    else:
         message = "Optimization failed."
         fmin = m.fmin
         if fmin.has_reached_call_limit:
