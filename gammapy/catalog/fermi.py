@@ -376,7 +376,7 @@ class SourceCatalogObject4FGL(SourceCatalogObjectFermiBase):
             elif morph_type in ["Map", "Ring", "2D Gaussian x2"]:
                 filename = de["Spatial_Filename"].strip()
                 path = make_path(
-                    "$GAMMAPY_DATA/catalogs/fermi/LAT_extended_sources_8years/Templates/"
+                    "$GAMMAPY_DATA/catalogs/fermi/Extended_14years/Templates/"
                 )
                 with warnings.catch_warnings():  # ignore FITS units warnings
                     warnings.simplefilter("ignore", FITSFixedWarning)
