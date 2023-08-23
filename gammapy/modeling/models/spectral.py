@@ -1147,6 +1147,7 @@ class PiecewiseNormSpectralModel(SpectralModel):
     @classmethod
     def from_dict(cls, data):
         """Create model from dict"""
+        data = data["spectral"]
         energy = u.Quantity(data["energy"]["data"], data["energy"]["unit"])
         parameters = Parameters.from_dict(data["parameters"])
         return cls.from_parameters(parameters, energy=energy)
