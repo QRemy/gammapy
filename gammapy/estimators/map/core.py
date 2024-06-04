@@ -75,16 +75,15 @@ VALID_QUANTITIES = [
     "npred",
     "npred_excess",
     "stat",
-    "stat_scan",
     "stat_null",
+    "stat_scan",
+    "stat_scan_local",
+    "norm_scan_values",
     "niter",
     "is_ul",
     "counts",
     "success",
     "n_dof",
-    "norm_scan_values",
-    "stat_scan_local",
-    "stat_scan",
 ]
 
 
@@ -95,14 +94,14 @@ OPTIONAL_QUANTITIES_COMMON = [
     "npred_excess",
     "stat",
     "stat_null",
+    "stat_scan",
+    "stat_scan_local",
+    "norm_scan_values",
     "niter",
     "is_ul",
     "counts",
     "success",
     "n_dof",
-    "norm_scan_values",
-    "stat_scan_local",
-    "stat_scan",
 ]
 
 
