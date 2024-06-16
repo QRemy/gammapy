@@ -298,7 +298,7 @@ def test_ts_map_stat_scan(fake_dataset):
 
     ind_best = maps.stat_scan_local.data.argmin(axis=1)
     ij, ik, il = np.indices(ind_best.shape)
-    norm = maps.norm_scan_values.data[ij, ind_best, ik, il]
+    norm = maps.dnde_scan_values.data[ij, ind_best, ik, il].value / maps.dnde_ref.value
     assert_allclose(norm[success], maps.norm.data[success], rtol=1e-5)
 
     maps.stat_scan.geom.data_shape == (1, 4001, 2, 2)
