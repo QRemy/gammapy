@@ -1040,6 +1040,8 @@ def approximate_profile(flux_map, sqrt_ts_threshold_ul="ignore", dnde_scan_axis=
         ]
     except NameError:
         pass
+    stat_approx.data[np.isnan(stat_approx.data)] = np.inf
+    stat_approx.data += -flux_map.ts.data - stat_approx.data.min(axis=1)
 
     if not sqrt_ts_threshold_ul == "ignore" and sqrt_ts_threshold_ul is not None:
         mask_ul = (flux_map.sqrt_ts.data < sqrt_ts_threshold_ul) & ~np.isnan(
@@ -1054,6 +1056,4 @@ def approximate_profile(flux_map, sqrt_ts_threshold_ul="ignore", dnde_scan_axis=
             / (special.erfc((-loc_ul + 0) / scale_ul) / 2)
         )
 
-    stat_approx.data[np.isnan(stat_approx.data)] = np.inf
-    stat_approx.data += -flux_map.ts.data - stat_approx.data.min(axis=1)
     return stat_approx
