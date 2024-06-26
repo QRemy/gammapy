@@ -493,7 +493,7 @@ class TSMapEstimator(Estimator, parallel.ParallelMixin):
         j, i = zip(*positions)
 
         geom = maps[0]["counts"].geom.squash(axis_name="energy")
-        energy_axis = geom.axes["energy"]
+        energy_axis = maps[0]["counts"].geom.axes["energy"]
         dnde_ref = self.model.spectral_model(energy_axis.center)
 
         for name in self.selection_all:
@@ -581,7 +581,10 @@ class TSMapEstimator(Estimator, parallel.ParallelMixin):
 
         datasets_models = datasets.models
 
-        pad_width = self.estimate_pad_width(dataset=datasets[0])
+        pad_width = (0, 0)
+        for dataset in datasets:
+            pad_width_dataset = self.estimate_pad_width(dataset=dataset)
+            pad_width = tuple(np.maximum(pad_width, pad_width_dataset))
 
         datasets_padded = Datasets()
         for dataset in datasets:
@@ -893,9 +896,7 @@ class BrentqFluxEstimator(Estimator):
         background = dataset.background.ravel()[:, None]
         counts = dataset.counts.ravel()[:, None]
         stat_scan = cash(counts, model * scale + background)
-
         stat_scan_local = stat_scan.sum(axis=0) - result["stat_null"]
-
         spline = InterpolatedUnivariateSpline(
             sparse_norms, stat_scan_local, k=1, ext="raise", check_finite=True
         )
@@ -1014,10 +1015,17 @@ def _ts_value(position, counts, exposure, background, kernel, norm, flux_estimat
                 norm=norm[idx],
             )
         )
+
+    norm_guess = np.array([d.norm_guess for d in datasets])
+    mask_valid = np.isfinite(norm_guess)
+    if np.any(mask_valid):
+        norm_guess = np.mean(norm_guess[mask_valid])
+    else:
+        norm_guess = 1.0
     dataset = SimpleMapDataset(
         counts=np.concatenate([d.counts for d in datasets]),
         background=np.concatenate([d.background for d in datasets]),
         model=np.concatenate([d.model for d in datasets]),
-        norm_guess=np.mean([d.norm_guess for d in datasets]),
+        norm_guess=norm_guess,
     )
     return flux_estimator.run(dataset)
