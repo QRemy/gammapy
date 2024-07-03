@@ -981,7 +981,7 @@ def get_flux_map_from_profile(
     return FluxMaps.from_maps(output_maps, **kwargs)
 
 
-def _generate_scan_values(power_min=-4, power_max=2, relative_error=1e-3):
+def _generate_scan_values(power_min=-4, power_max=2, relative_error=1e-2):
     """Values sampled such as we can probe a given `relative_error` on the norm
     between 10**`power_min` and 10**`power_max`.
 
