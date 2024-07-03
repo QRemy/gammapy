@@ -200,7 +200,7 @@ def test_compute_ts_map_psf(fermi_dataset):
     model = SkyModel(spatial_model=spatial_model, spectral_model=spectral_model)
 
     estimator = TSMapEstimator(
-        model=model, kernel_width="1 deg", selection_optional="all"
+        model=model, kernel_width="1 deg", selection_optional=["ul", "errn-errp"]
     )
     result = estimator.run(fermi_dataset)
 
@@ -283,46 +283,43 @@ def test_ts_map_stat_scan(fake_dataset):
 
     dataset = fake_dataset.downsample(25)
 
+    estimator_ref = TSMapEstimator(
+        model,
+        kernel_width="0.3 deg",
+        energy_edges=[200, 3500] * u.GeV,
+    )
+
     estimator = TSMapEstimator(
         model,
         kernel_width="0.3 deg",
         selection_optional=["stat_scan"],
         energy_edges=[200, 3500] * u.GeV,
     )
+
+    maps_ref = estimator_ref.run(dataset)
     maps = estimator.run(dataset)
     success = maps.success.data
 
-    maps.stat_scan_local.geom.data_shape == (1, 11, 2, 2)
-    ts = np.abs(maps["stat_scan_local"].data.min(axis=1))
-    assert_allclose(ts[success], maps.ts.data[success], rtol=1e-3)
+    assert maps.stat_scan.geom.data_shape == (1, 109, 2, 2)
+    ts = np.abs(maps["stat_scan"].data.min(axis=1))
+    assert_allclose(ts[success], maps_ref.ts.data[success], rtol=1e-3)
 
-    ind_best = maps.stat_scan_local.data.argmin(axis=1)
+    ind_best = maps.stat_scan.data.argmin(axis=1)
     ij, ik, il = np.indices(ind_best.shape)
 
     dnde_ref = maps.dnde_ref.squeeze()
     assert maps.dnde_scan_values.unit == dnde_ref.unit
     norm = maps.dnde_scan_values.data[ij, ind_best, ik, il] / dnde_ref.value
-    assert_allclose(norm[success], maps.norm.data[success], rtol=1e-5)
+    assert_allclose(norm[success], maps_ref.norm.data[success], rtol=1e-5)
 
-    maps.stat_scan.geom.data_shape == (1, 4001, 2, 2)
-
+    assert maps.stat_scan.geom.data_shape == (1, 109, 2, 2)
     ts = np.abs(maps["stat_scan"].data.min(axis=1))
-    assert_allclose(ts[success], maps.ts.data[success], rtol=1e-3)
+    assert_allclose(ts[success], maps_ref.ts.data[success], rtol=1e-3)
 
-    dnde_coord = maps.stat_scan.geom.get_coord()["dnde"]
     ind_best = maps.stat_scan.data.argmin(axis=1)
     ij, ik, il = np.indices(ind_best.shape)
-    dnde = dnde_coord[ij, ind_best, ik, il]
-    assert_allclose(dnde[success], maps.norm.data[success] * dnde_ref, rtol=5e-2)
-
-    combined_map = combine_flux_maps([maps, maps], method="profile")
-    assert_allclose(combined_map.ts.data, 2 * ts)
-    assert_allclose(combined_map.norm.data, norm, rtol=5e-2)
-
-    maps1 = deepcopy(maps)
-    combined_map = combine_flux_maps([maps, maps1], method="profile")
-    assert_allclose(combined_map.ts.data, 2 * ts)
-    assert_allclose(combined_map.norm.data, norm, rtol=5e-2)
+    dnde = maps.dnde_scan_values.quantity[ij, ind_best, ik, il]
+    assert_allclose(dnde[success], maps_ref.norm.data[success] * dnde_ref, rtol=1e-5)
 
     maps1 = deepcopy(maps)
     maps1._reference_model.parameters["amplitude"].value = 1
@@ -339,7 +336,7 @@ def test_ts_map_with_model(fake_dataset):
     estimator = TSMapEstimator(
         model,
         kernel_width="0.3 deg",
-        selection_optional=["all"],
+        selection_optional=["ul", "errn-errp"],
         energy_edges=[200, 3500] * u.GeV,
     )
     maps = estimator.run(fake_dataset)
