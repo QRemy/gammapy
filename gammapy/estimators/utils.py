@@ -978,6 +978,21 @@ def get_flux_map_from_profile(
     return FluxMaps.from_maps(output_maps, **kwargs)
 
 
+def _generate_scan_values(power_min=-4, power_max=2, relative_error=0.01):
+    """Values sampled such as we can probe a given `relative_error` on the norm
+    between 10**`power_min` and 10**`power_max`.
+
+    """
+    arrays = []
+    for power in range(power_min, power_max):
+        vmin = 10**power
+        vmax = 10 ** (power + 1)
+        bin_per_decade = int((vmax - vmin) / (vmin * relative_error))
+        arrays.append(np.linspace(vmin, vmax, bin_per_decade + 1))
+    scan_1side = np.unique(np.concatenate(arrays))
+    return np.concatenate((-scan_1side[::-1], [0], scan_1side))
+
+
 def approximate_profile(flux_map, sqrt_ts_threshold_ul="ignore", dnde_scan_axis=None):
     """Likelihood profile approximation assuming that probabilities distributions for
     flux points correspond to asymmetric gaussians and for upper limits to complementary error functions.
@@ -1000,7 +1015,6 @@ def approximate_profile(flux_map, sqrt_ts_threshold_ul="ignore", dnde_scan_axis=
         Flux map.
 
     """
-    from .map.ts import _generate_scan_values
 
     if dnde_scan_axis is None:
         dnde_scan_axis = MapAxis(
