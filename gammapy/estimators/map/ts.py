@@ -562,13 +562,9 @@ class TSMapEstimator(Estimator, parallel.ParallelMixin):
 
         datasets_models = datasets.models
 
-        pad_width = (0, 0)
-        for dataset in datasets:
-            pad_width_dataset = self.estimate_pad_width(dataset=dataset)
-            pad_width = tuple(np.maximum(pad_width, pad_width_dataset))
-
         datasets_padded = Datasets()
         for dataset in datasets:
+            pad_width = self.estimate_pad_width(dataset=dataset)
             dataset = dataset.pad(pad_width, name=dataset.name)
             dataset = dataset.downsample(self.downsampling_factor, name=dataset.name)
             datasets_padded.append(dataset)
