@@ -4,6 +4,7 @@ import html
 from itertools import compress
 import numpy as np
 import scipy.interpolate
+from scipy.ndimage import map_coordinates
 from astropy import units as u
 from .compat import COPY_IF_NEEDED
 
@@ -14,6 +15,57 @@ __all__ = [
 ]
 
 INTERPOLATION_ORDER = {None: 0, "nearest": 0, "linear": 1, "quadratic": 2, "cubic": 3}
+
+
+class CartesianGridInterpolator:
+    def __init__(
+        self, points, values, method="linear", fill_value=np.nan, bounds_error=True
+    ):
+        self.limits = np.array([[min(x), max(x)] for x in points])
+        self.values = np.asarray(values, dtype=float)
+        self.method = method
+        self.fill_value = fill_value
+
+        if bounds_error or fill_value is None:
+            self._interpolator = scipy.interpolate.RegularGridInterpolator(
+                points,
+                values,
+                method=method,
+                fill_value=fill_value,
+                bounds_error=bounds_error,
+            )
+        else:
+            self._interpolator = None
+
+    def __call__(self, xi, method=None, **kwargs):
+        """
+        `xi` here is an array-like (an array or a list) of points.
+
+        Each "point" is an ndim-dimensional array_like, representing
+        the coordinates of a point in ndim-dimensional space.
+        """
+
+        method = self.method if method is None else method
+
+        # interpolate
+        if self._interpolator:
+            return self._interpolator(xi, method, **kwargs)
+        else:
+            # transpose the xi array into the ``map_coordinates`` convention
+            # which takes coordinates of a point along columns of a 2D array.
+            xi = np.asarray(xi).T
+
+            # convert from data coordinates to pixel coordinates
+            ns = self.values.shape
+            coords = [
+                (n - 1) * (val - lo) / (hi - lo)
+                for val, n, (lo, hi) in zip(xi, ns, self.limits)
+            ]
+
+            order = INTERPOLATION_ORDER[method]
+            return map_coordinates(
+                self.values, coords, order=order, mode="constant", cval=self.fill_value
+            )  # fill_value
 
 
 class ScaledRegularGridInterpolator:
@@ -83,7 +135,7 @@ class ScaledRegularGridInterpolator:
             values_scaled = np.squeeze(values_scaled)
 
         if axis is None:
-            self._interpolate = scipy.interpolate.RegularGridInterpolator(
+            self._interpolate = CartesianGridInterpolator(
                 points=points_scaled, values=values_scaled, **kwargs
             )
         else:
