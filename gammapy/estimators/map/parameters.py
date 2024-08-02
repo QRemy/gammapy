@@ -30,11 +30,10 @@ class ParameterMapEstimator:
         if tsmap_kwargs:
             tsmap_kwargs = {
                 key: item for key, item in tsmap_kwargs.items() if key not in ["model"]
-            }  # , "sum_over_energy_groups"]}
+            }
         else:
             tsmap_kwargs = {}
         self.estimator = TSMapEstimator(
-            # sum_over_energy_groups=True,
             model=model,
             **tsmap_kwargs,
         )
