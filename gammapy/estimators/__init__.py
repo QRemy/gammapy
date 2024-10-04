@@ -1,9 +1,16 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 """Estimators."""
+
 from gammapy.utils.registry import Registry
 from .core import Estimator
 from .energydependentmorphology import EnergyDependentMorphologyEstimator
-from .map import ASmoothMapEstimator, ExcessMapEstimator, FluxMaps, TSMapEstimator
+from .map import (
+    ASmoothMapEstimator,
+    ExcessMapEstimator,
+    FluxMaps,
+    TSMapEstimator,
+    TSMapGridEstimator,
+)
 from .metadata import FluxMetaData
 from .parameter import ParameterEstimator
 from .points import (
@@ -30,6 +37,7 @@ __all__ = [
     "ParameterEstimator",
     "SensitivityEstimator",
     "TSMapEstimator",
+    "TSMapGridEstimator",
     "EnergyDependentMorphologyEstimator",
     "FluxMetaData",
 ]
@@ -39,6 +47,7 @@ ESTIMATOR_REGISTRY = Registry(
     [
         ExcessMapEstimator,
         TSMapEstimator,
+        TSMapGridEstimator,
         FluxPointsEstimator,
         ASmoothMapEstimator,
         LightCurveEstimator,
