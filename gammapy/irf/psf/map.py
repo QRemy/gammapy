@@ -30,9 +30,12 @@ def _psf_upsampling_factor(psf, geom, position, energy=None, precision_factor=12
     factors = []
     for psf_r68 in psf_r68s:
         base_factor = (2 * psf_r68 / geom.pixel_scales.max()).to_value("")
-        factor = np.minimum(
-            int(np.ceil(precision_factor / base_factor)), PSF_MAX_OVERSAMPLING
-        )
+        if base_factor == 0 or not np.isfinite(base_factor):
+            factor = 1
+        else:
+            factor = np.minimum(
+                int(np.ceil(precision_factor / base_factor)), PSF_MAX_OVERSAMPLING
+            )
         if isinstance(geom, HpxGeom):
             factor = int(2 ** np.ceil(np.log(factor) / np.log(2)))
         factors.append(factor)
