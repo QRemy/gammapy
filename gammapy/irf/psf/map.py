@@ -11,7 +11,7 @@ from gammapy.utils.gauss import Gauss2DPDF
 from gammapy.utils.random import InverseCDFSampler, get_random_state
 from ..core import IRFMap
 from .core import PSF
-from .kernel import PSFKernel
+from .kernel import PSFKernel, PSFKernels
 from gammapy.utils.deprecation import deprecated_renamed_argument
 
 __all__ = ["PSFMap", "RecoPSFMap"]
@@ -280,8 +280,52 @@ class PSFMap(IRFMap):
 
         Returns
         -------
-        kernel : `~gammapy.irf.PSFKernel` or list of `PSFKernel`
+        kernel : `~gammapy.irf.PSFKernel`
             The resulting kernel.
+        """
+        psf_kernels = self.get_psf_kernels(
+            geom=geom,
+            position=position,
+            max_radius=max_radius,
+            containment=containment,
+            precision_factor=precision_factor,
+        )
+        return psf_kernels.to_psf_kernel()
+
+    def get_psf_kernels(
+        self,
+        geom,
+        position=None,
+        max_radius=None,
+        containment=0.999,
+        precision_factor=12,
+    ):
+        """Return a PSF kernel at the given position.
+
+        The PSF is returned in the form a WcsNDMap defined by the input Geom.
+
+        Parameters
+        ----------
+        geom : `~gammapy.maps.Geom`
+            Target geometry to use.
+        position : `~astropy.coordinates.SkyCoord`, optional
+            Target position. Should be a single coordinate. By default, the
+            center position is used.
+        max_radius : `~astropy.coordinates.Angle`, optional
+            Maximum angular size of the kernel map.
+            Default is None and it will be computed for the `containment` fraction set.
+        containment : float, optional
+            Containment fraction to use as size of the kernel.
+            The radius can be overwritten using the `max_radius` argument.
+            Default is 0.999.
+        precision_factor : int, optional
+            Factor between the bin half-width of the geom and the median R68% containment radius.
+            Used only for the oversampling method. Default is 10.
+
+        Returns
+        -------
+        kernel : `~gammapy.irf.PSFKernels`
+            The resulting kernels.
         """
 
         if geom.is_region or geom.is_hpx:
@@ -309,6 +353,7 @@ class PSFMap(IRFMap):
         factor = _psf_upsampling_factor(self, geom, position, precision_factor)
         geom = geom.to_odd_npix(max_radius=max_radius)
         kernel_map = Map.from_geom(geom=geom)
+        kernels = []
         for im, ind in zip(kernel_map.iter_by_image(keepdims=True), range(n_radii)):
             geom_image_cut = im.geom.to_odd_npix(max_radius=radii[ind]).upsample(
                 factor=factor[ind]
@@ -333,9 +378,8 @@ class PSFMap(IRFMap):
             kernel_image = kernel_image.downsample(
                 factor=factor[ind], preserve_counts=True
             )
-            coords = kernel_image.geom.get_coord()
-            im.fill_by_coord(coords, weights=kernel_image.data)
-        return PSFKernel(kernel_map, normalize=True)
+            kernels.append(PSFKernel(kernel_image, normalize=True))
+        return PSFKernels(kernels)
 
     def sample_coord(self, map_coord, random_state=0, chunk_size=10000):
         """Apply PSF corrections on the coordinates of a set of simulated events.
