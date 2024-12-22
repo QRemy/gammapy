@@ -7,7 +7,23 @@ from gammapy.maps import Map
 from gammapy.modeling.models import PowerLawSpectralModel
 from gammapy.utils.deprecation import deprecated_renamed_argument
 
-__all__ = ["PSFKernel"]
+__all__ = ["PSFKernel", "PSFKernels"]
+
+
+class PSFKernels(tuple):
+    """PSF kernels container
+
+    Parameters
+    ----------
+    psf_kernels : list of `PSFKernel`
+        Sky models.
+    """
+
+    def __init__(self, psf_kernels=None):
+        if psf_kernels is None:
+            psf_kernels = []
+
+        self._psf_kernels = psf_kernels
 
 
 class PSFKernel:
