@@ -7,7 +7,7 @@ from astropy.coordinates import angular_separation
 from astropy.utils import lazyproperty
 from regions import CircleSkyRegion
 import matplotlib.pyplot as plt
-from gammapy.irf import EDispKernel, PSFKernel
+from gammapy.irf import EDispKernel, PSFKernel, PSFKernels
 from gammapy.maps import HpxNDMap, Map, RegionNDMap, WcsNDMap
 from gammapy.modeling.models import PointSpatialModel, TemplateNPredModel
 from .utils import apply_edisp
@@ -146,10 +146,14 @@ class MapEvaluator:
     @property
     def psf_width(self):
         """Width of the PSF."""
-        if self.psf is not None:
-            psf_width = np.max(self.psf.psf_kernel_map.geom.width)
-        else:
+        if not self.psf:
             psf_width = 0 * u.deg
+        elif isinstance(self.psf, PSFKernels):
+            psf_width = np.max(
+                u.Quantity([np.max(psf.psf_kernel_map.geom.width) for psf in self.psf])
+            )
+        else:
+            psf_width = np.max(self.psf.psf_kernel_map.geom.width)
         return psf_width
 
     def use_psf_containment(self, geom):
@@ -208,7 +212,10 @@ class MapEvaluator:
         if (
             psf
             and self.model.spatial_model
-            and not (isinstance(self.psf, PSFKernel) and psf.has_single_spatial_bin)
+            and not (
+                (isinstance(self.psf, PSFKernel) or isinstance(self.psf, PSFKernels))
+                and psf.has_single_spatial_bin
+            )
         ):
             energy_name = psf.energy_name
             geom_psf = geom if energy_name == "energy" else exposure.geom
@@ -218,7 +225,7 @@ class MapEvaluator:
                 kwargs = {energy_name: energy_values, "rad": geom.region.radius}
                 self.psf_containment = psf.containment(**kwargs)
             else:
-                self.psf = psf.get_psf_kernel(
+                self.psf = psf.get_psf_kernels(
                     position=self.position,
                     geom=geom_psf,
                     containment=PSF_CONTAINMENT,
@@ -398,9 +405,11 @@ class MapEvaluator:
 
     @property
     def apply_psf_after_edisp(self):
-        return (
-            self.psf is not None and "energy" in self.psf.psf_kernel_map.geom.axes.names
-        )
+        if isinstance(self.psf, PSFKernels):
+            axe_names = self.psf[0].psf_kernel_map.geom.axes.names
+        else:
+            axe_names = self.psf.psf_kernel_map.geom.axes.names
+        return self.psf is not None and "energy" in axe_names
 
     def compute_npred(self):
         """Evaluate model predicted counts.

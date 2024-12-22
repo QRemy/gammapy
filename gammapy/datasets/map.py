@@ -568,7 +568,7 @@ class MapDataset(Dataset):
             else:
                 map_ref = self.counts
             if map_ref and not map_ref.geom.is_region:
-                return self.psf.get_psf_kernel(map_ref.geom)
+                return self.psf.get_psf_kernels(map_ref.geom)
 
     @property
     def meta(self):
