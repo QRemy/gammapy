@@ -17,6 +17,7 @@ import gammapy.utils.parallel as parallel
 from gammapy.utils.interpolation import ScaledRegularGridInterpolator
 from gammapy.utils.units import unit_from_fits_image_hdu
 from gammapy.visualization.utils import add_colorbar
+from ..axes import MapAxis
 from ..geom import pix_tuple_to_idx
 from ..utils import INVALID_INDEX
 from .core import WcsMap
@@ -860,12 +861,14 @@ class WcsNDMap(WcsMap):
         map : `WcsNDMap`
             Convolved map.
         """
-        from gammapy.irf import PSFKernel
+        from gammapy.irf import PSFKernel, PSFKernels
 
-        if self.geom.is_image and not isinstance(kernel, PSFKernel):
+        if self.geom.is_image and not (
+            isinstance(kernel, PSFKernel) or isinstance(kernel, PSFKernels)
+        ):
             if kernel.ndim > 2:
                 raise ValueError(
-                    "Image convolution with 3D kernel requires a PSFKernel object"
+                    "Image convolution with 3D kernel requires PSFKernel or PSFKernels object"
                 )
 
         geom = self.geom.copy()
@@ -880,6 +883,20 @@ class WcsNDMap(WcsMap):
             if self.geom.is_image:
                 geom = geom.to_cube(kmap.geom.axes)
 
+        if isinstance(kernel, PSFKernels):
+            kernels = []
+            axes = []
+            for k in kernel:
+                kmap = k.psf_kernel_map
+                if not np.allclose(
+                    self.geom.pixel_scales.deg, kmap.geom.pixel_scales.deg, rtol=1e-5
+                ):
+                    raise ValueError("Pixel size of kernel and map not compatible.")
+                kernels.append(kmap.data.squeeze().astype(np.float32))
+                axes.extend(list(kmap.geom.axes))
+            if self.geom.is_image:
+                geom = geom.to_cube([MapAxis.from_stack(axes)])
+
         if mode == "full":
             pad_width = [0.5 * (width - 1) for width in kernel.shape[-2:]]
             geom = geom.pad(pad_width, axis_name=None)
@@ -888,24 +905,36 @@ class WcsNDMap(WcsMap):
                 "WcsNDMap.convolve: mode='valid' is not supported."
             )
 
-        shape_axes_kernel = kernel.shape[slice(0, -2)]
-
-        if len(shape_axes_kernel) > 0:
-            if not geom.shape_axes == shape_axes_kernel:
-                raise ValueError(
-                    f"Incompatible shape between data {geom.shape_axes}"
-                    " and kernel {shape_axes_kernel}"
-                )
-
-        if self.geom.is_image and kernel.ndim == 3:
-            indexes = range(kernel.shape[0])
+        if self.geom.is_image:
+            if isinstance(kernel, PSFKernels):
+                indexes = range(len(kernels))
+            elif kernel.ndim == 3:
+                indexes = range(kernel.shape[0])
+            else:
+                indexes = [0]
             images = repeat(self.data.astype(np.float32))
         else:
             indexes = list(self.iter_by_image_index())
             images = (self.data[idx] for idx in indexes)
-        kernels = (
-            kernel[Ellipsis] if kernel.ndim == 2 else kernel[idx] for idx in indexes
-        )
+
+        if isinstance(kernel, PSFKernels):
+            if len(indexes) != len(kernels):
+                raise ValueError(
+                    f"Incompatible lenght between data {len(indexes)}"
+                    " and kernel {len(kernels)}"
+                )
+        else:
+            shape_axes_kernel = kernel.shape[slice(0, -2)]
+            if len(shape_axes_kernel) > 0:
+                if not geom.shape_axes == shape_axes_kernel:
+                    raise ValueError(
+                        f"Incompatible shape between data {geom.shape_axes}"
+                        " and kernel {shape_axes_kernel}"
+                    )
+
+            kernels = (
+                kernel[Ellipsis] if kernel.ndim == 2 else kernel[idx] for idx in indexes
+            )
 
         convolved = parallel.run_multiprocessing(
             self._convolve,
