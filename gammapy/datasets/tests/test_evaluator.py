@@ -7,6 +7,7 @@ import astropy.units as u
 from astropy.coordinates import SkyCoord
 from regions import CircleSkyRegion
 from gammapy.datasets.evaluator import MapEvaluator
+from gammapy.datasets import Datasets
 from gammapy.irf import PSFKernel, RecoPSFMap
 from gammapy.maps import Map, MapAxis, RegionGeom, RegionNDMap, WcsGeom
 from gammapy.modeling.models import (
@@ -16,6 +17,7 @@ from gammapy.modeling.models import (
     PointSpatialModel,
     PowerLawSpectralModel,
     SkyModel,
+    create_crab_spectral_model,
 )
 from gammapy.utils.gauss import Gauss2DPDF
 from gammapy.utils.testing import mpl_plot_check
@@ -277,3 +279,29 @@ def test_norm_only_changed():
     spectral_model.amplitude.value *= 2
     spectral_model.index.value *= 2
     assert not evaluator.parameter_norm_only_changed
+
+
+def test_evaluator_multiresolution():
+    datasets = Datasets.read("$GAMMAPY_DATA/hawc/DL4/HAWC_pass4_public_Crab.yaml")
+    # datasets = Datasets(datasets[-1])
+
+    position = SkyCoord.from_name("Crab Nebula")
+    spatial_model = PointSpatialModel(
+        lon_0=position.galactic.l, lat_0=position.galactic.b, frame="galactic"
+    )
+    model = SkyModel(
+        spectral_model=create_crab_spectral_model(), spatial_model=spatial_model
+    )
+
+    import gammapy.datasets.map as dmap
+
+    dmap.USE_MULTIRESOLUTION = False
+    datasets.models = [model]
+
+    sta_ref = datasets.stat_sum()
+    npred_ref = datasets[0].npred().data.sum()
+
+    dmap.USE_MULTIRESOLUTION = True
+    datasets.models = [model]
+    assert_allclose(datasets.stat_sum(), sta_ref, rtol=1e-5)
+    assert_allclose(datasets[0].npred().data.sum(), npred_ref, rtol=1e-3)
