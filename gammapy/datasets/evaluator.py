@@ -60,6 +60,7 @@ class MapEvaluator:
         mask=None,
         evaluation_mode="local",
         use_cache=True,
+        use_multiresolution=False,
     ):
         self.model = model
         self.exposure = exposure
@@ -68,6 +69,7 @@ class MapEvaluator:
         self.mask = mask
         self.gti = gti
         self.use_cache = use_cache
+        self.use_multiresolution = use_multiresolution
         self.contributes = True
         self.psf_containment = None
 
@@ -353,7 +355,55 @@ class MapEvaluator:
 
     def apply_psf(self, npred):
         """Convolve npred cube with PSF."""
-        return npred.convolve(self.psf)
+        if self.use_multiresolution and not (
+            npred.geom.is_image or npred.geom.is_region
+        ):
+            pixel_scale = npred.geom.pixel_scales.max().to_value("deg")
+            factor = np.maximum(np.floor(self.psf._r68 / pixel_scale / 3.0), 1)
+            factor[~np.isfinite(factor)] = 1
+            width_diff = (np.nanmax(self.psf._r99) - self.psf._r99) * u.deg
+            width_diff[~np.isfinite(width_diff)] = 0.0 * u.deg
+
+            results = []
+            for image, ind, kernel in zip(
+                npred.iter_by_image(keepdims=True),
+                npred.iter_by_image_index(),
+                self.psf.psf_kernel_map.iter_by_image(keepdims=True),
+            ):
+                res = Map.from_geom(image.geom)
+                if factor[ind] > 1:
+                    kernel_sum = kernel.data.sum()
+                    kernel_geom = kernel.geom.to_odd_npix(
+                        binsz=kernel.geom.pixel_scales * factor[ind]
+                    )
+                    kernel = kernel.interp_to_geom(kernel_geom, preserve_counts=True)
+                    kernel.data *= kernel_sum / kernel.data.sum()
+
+                    image_geom = image.geom.to_odd_npix(
+                        binsz=image.geom.pixel_scales * factor[ind]
+                    )
+                    image = image.interp_to_geom(image_geom, preserve_counts=True)
+
+                if width_diff[ind] > 0:
+                    # kernel = kernel.cutout(kernel.geom.center_skydir, width=kernel.geom.to_image().width.squeeze()-width_diff[ind], odd_npix=True)
+                    image = image.cutout(
+                        image.geom.center_skydir,
+                        width=image.geom.to_image().width.squeeze() - width_diff[ind],
+                    )
+
+                convolved = image.convolve(kernel.data)
+                if factor[ind] > 1:
+                    convolved.upsample(factor[ind], preserve_counts=True)
+                    convolved = convolved.reduce_over_axes().interp_to_geom(
+                        res.geom.to_image(), preserve_counts=True
+                    )
+                    convolved = convolved.to_cube(axes=res.geom.axes)
+
+                res.stack(convolved)
+                results.append(res)
+            return Map.from_stack(results)
+        else:
+            return npred.convolve(self.psf)
 
     def apply_edisp(self, npred):
         """Convolve map data with energy dispersion.
