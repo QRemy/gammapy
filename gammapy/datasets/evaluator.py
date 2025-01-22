@@ -105,6 +105,7 @@ class MapEvaluator:
         """Reset cached properties."""
         del self._compute_npred
         del self._compute_flux_spatial
+        del self._kernels_cache
         self._computation_cache = None
         self._cached_parameter_previous = None
 
@@ -358,52 +359,85 @@ class MapEvaluator:
         if self.use_multiresolution and not (
             npred.geom.is_image or npred.geom.is_region
         ):
-            pixel_scale = npred.geom.pixel_scales.max().to_value("deg")
-            factor = np.maximum(np.floor(self.psf._r68 / pixel_scale / 3.0), 1)
-            factor[~np.isfinite(factor)] = 1
-            width_diff = (np.nanmax(self.psf._r99) - self.psf._r99) * u.deg
-            width_diff[~np.isfinite(width_diff)] = 0.0 * u.deg
+            kernels_cache = self._kernels_cache
+            input_geom = kernels_cache["input_geom"]
 
-            results = []
-            for image, ind, kernel in zip(
-                npred.iter_by_image(keepdims=True),
+            output = Map.from_geom(npred.geom)
+            for (
+                ind,
+                kernel,
+                output_geom,
+                has_same_geom,
+            ) in zip(
                 npred.iter_by_image_index(),
-                self.psf.psf_kernel_map.iter_by_image(keepdims=True),
+                kernels_cache["kernels"],
+                kernels_cache["output_geoms"],
+                kernels_cache["has_same_geom"],
             ):
-                res = Map.from_geom(image.geom)
-                if factor[ind] > 1:
-                    kernel_sum = kernel.data.sum()
-                    kernel_geom = kernel.geom.to_odd_npix(
-                        binsz=kernel.geom.pixel_scales * factor[ind]
-                    )
-                    kernel = kernel.interp_to_geom(kernel_geom, preserve_counts=True)
-                    kernel.data *= kernel_sum / kernel.data.sum()
+                image = Map.from_geom(input_geom, data=npred.data[ind])
+                if not has_same_geom:
+                    image_sum = image.data.sum()
+                    image = image.interp_to_geom(output_geom)
+                    image.data *= image_sum / image.data.sum()
 
-                    image_geom = image.geom.to_odd_npix(
-                        binsz=image.geom.pixel_scales * factor[ind]
-                    )
-                    image = image.interp_to_geom(image_geom, preserve_counts=True)
+                convolved = image.convolve(kernel)
+                if not has_same_geom:
+                    convolved_sum = convolved.data.sum()
+                    convolved = convolved.interp_to_geom(input_geom)
+                    convolved.data *= convolved_sum / convolved.data.sum()
 
-                if width_diff[ind] > 0:
-                    # kernel = kernel.cutout(kernel.geom.center_skydir, width=kernel.geom.to_image().width.squeeze()-width_diff[ind], odd_npix=True)
-                    image = image.cutout(
-                        image.geom.center_skydir,
-                        width=image.geom.to_image().width.squeeze() - width_diff[ind],
-                    )
-
-                convolved = image.convolve(kernel.data)
-                if factor[ind] > 1:
-                    convolved.upsample(factor[ind], preserve_counts=True)
-                    convolved = convolved.reduce_over_axes().interp_to_geom(
-                        res.geom.to_image(), preserve_counts=True
-                    )
-                    convolved = convolved.to_cube(axes=res.geom.axes)
-
-                res.stack(convolved)
-                results.append(res)
-            return Map.from_stack(results)
+                output.data[ind] = convolved.data
+            return output
         else:
             return npred.convolve(self.psf)
+
+    @lazyproperty
+    def _kernels_cache(self):
+        pixel_scale = self.psf.psf_kernel_map.geom.pixel_scales.max().to_value("deg")
+        factor = np.maximum(np.floor(self.psf._r68 / pixel_scale / 3.0), 1)
+        factor[~np.isfinite(factor)] = 1
+        width_diff = (np.nanmax(self.psf._r99) - self.psf._r99) * u.deg
+        width_diff[~np.isfinite(width_diff)] = 0.0 * u.deg
+        kernels = []
+        output_geoms = []
+        has_same_geom = (factor == 1) & (width_diff == 0)
+        for ind, kernel, image in zip(
+            self.psf.psf_kernel_map.iter_by_image_index(),
+            self.psf.psf_kernel_map.iter_by_image(keepdims=True),
+            Map.from_geom(self._geom_reco).iter_by_image(keepdims=True),
+        ):
+            image_geom = image.geom
+            if factor[ind] > 1:
+                kernel_sum = kernel.data.sum()
+                kernel_geom = kernel.geom.to_odd_npix(
+                    binsz=kernel.geom.pixel_scales * factor[ind]
+                )
+                kernel = kernel.interp_to_geom(kernel_geom)
+                kernel.data *= kernel_sum / kernel.data.sum()
+
+                image_geom = image_geom.to_odd_npix(
+                    binsz=image_geom.pixel_scales * factor[ind]
+                )
+            if width_diff[ind] > 0:
+                kernel = kernel.cutout(
+                    kernel.geom.center_skydir,
+                    width=kernel.geom.to_image().width.squeeze() - width_diff[ind],
+                    odd_npix=True,
+                )
+
+                image_geom = image_geom.cutout(
+                    image_geom.center_skydir,
+                    width=image_geom.to_image().width.squeeze() - width_diff[ind],
+                )
+            kernels.append(kernel.data.squeeze())
+            output_geoms.append(image_geom.to_image())
+        input_geom = self._geom_reco.to_image()
+        return dict(
+            kernels=kernels,
+            input_geom=input_geom,
+            output_geoms=output_geoms,
+            has_same_geom=has_same_geom,
+        )
 
     def apply_edisp(self, npred):
         """Convolve map data with energy dispersion.
