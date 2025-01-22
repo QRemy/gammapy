@@ -51,6 +51,7 @@ BINSZ_IRF_DEFAULT = 0.2 * u.deg
 
 EVALUATION_MODE = "local"
 USE_NPRED_CACHE = True
+USE_MULTIRESOLUTION = False
 
 
 def create_map_dataset_geoms(
@@ -683,6 +684,7 @@ class MapDataset(Dataset):
                         evaluation_mode=EVALUATION_MODE,
                         gti=self.gti,
                         use_cache=USE_NPRED_CACHE,
+                        use_multiresolution=USE_MULTIRESOLUTION,
                     )
                     self._evaluators[model.name] = evaluator
 
