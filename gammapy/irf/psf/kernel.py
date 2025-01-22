@@ -2,8 +2,9 @@
 import html
 import numpy as np
 import astropy.units as u
+from astropy.utils import lazyproperty
 import matplotlib.pyplot as plt
-from gammapy.maps import Map
+from gammapy.maps import Map, containment_radius
 from gammapy.modeling.models import PowerLawSpectralModel
 from gammapy.utils.deprecation import deprecated_renamed_argument
 
@@ -87,6 +88,28 @@ class PSFKernel:
     def psf_kernel_map(self):
         """The map object holding the kernel as a `~gammapy.maps.Map`."""
         return self._psf_kernel_map
+
+    @lazyproperty
+    def _r68(self):
+        """Containment radius corresponding to a 68% containment surface"""
+        return self._containment_radius(0.68)
+
+    @lazyproperty
+    def _r99(self):
+        """Containment radius corresponding to a 99% containment surface"""
+        return self._containment_radius(0.99)
+
+    def _containment_radius(self, fraction):
+        """Containment radius corresponding to a given containment surface fraction"""
+        radii = []
+        for image in self._psf_kernel_map.iter_by_image():
+            try:
+                radii.append(
+                    containment_radius(image, fraction=fraction).to_value("deg")
+                )
+            except ValueError:
+                radii.append(np.nan)
+        return np.array(radii)
 
     @classmethod
     def read(cls, *args, **kwargs):
