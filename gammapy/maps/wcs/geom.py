@@ -1090,7 +1090,7 @@ class WcsGeom(Geom):
             f"\twcs ref    : {lon_ref:.1f} deg, {lat_ref:.1f} deg\n"
         )
 
-    def to_odd_npix(self, max_radius=None):
+    def to_odd_npix(self, max_radius=None, binsz=None):
         """Create a new geometry object with an odd number of pixels and a maximum size.
 
         This is useful for PSF kernel creation.
@@ -1100,6 +1100,10 @@ class WcsGeom(Geom):
         max_radius : `~astropy.units.Quantity`, optional
             Maximum radius of the geometry (half the width).
             Default is None.
+        binsz : `~astropy.units.Quantity`, optional
+            Pixel size of the geometry.
+            Default is None.
+
 
         Returns
         -------
@@ -1111,7 +1115,8 @@ class WcsGeom(Geom):
         else:
             width = 2 * u.Quantity(max_radius)
 
-        binsz = self.pixel_scales.max()
+        if binsz is None:
+            binsz = self.pixel_scales.max()
 
         width_npix = (width / binsz).to_value("")
         npix = round_up_to_odd(width_npix)
