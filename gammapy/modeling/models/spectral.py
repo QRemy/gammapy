@@ -577,13 +577,17 @@ class SpectralModel(ModelBase):
             samples = np.random.multivariate_normal(
                 self.parameters.value, self.covariance, n_samples
             )
+            # Reapply units to the sampled parameters
+            parameter_units = [par.unit for par in self.parameters]
+            samples = np.array([sample * parameter_units for sample in samples])
+
             f = self(energy.center)
             spl_ax = MapAxis(range(n_samples), node_type="center", name="sample")
             f_samples = RegionNDMap.create(region=None, axes=[energy, spl_ax])
             f_samples.quantity = (
                 np.array(
                     [
-                        self.evaluate(energy.center.value, *samples[k, :])
+                        self.evaluate(energy.center, *samples[k, :])
                         for k in range(n_samples)
                     ]
                 )
