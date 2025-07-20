@@ -823,6 +823,11 @@ class WcsGeom(Geom):
 
     @lazyproperty
     def _solid_angle(self):
+        if self._projection == "CAR":
+            cdelt = self.pixel_scales
+            value = (np.atleast_1d(np.prod(cdelt.value)) * (cdelt.unit**2.0)).to(u.sr)
+            # TODO: we should just return a scalar in that case
+            return value * np.ones(self.data_shape_image)
         if self.is_regular:
             coord = self.to_image().get_coord(mode="edges").skycoord
         else:
