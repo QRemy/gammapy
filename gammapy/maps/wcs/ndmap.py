@@ -156,6 +156,7 @@ class WcsNDMap(WcsMap):
         """
         if self.geom.is_regular:
             pix = self.geom.coord_to_pix(coords)
+            pix = np.broadcast_arrays(*pix)
             return self.interp_by_pix(
                 pix, method=method, fill_value=fill_value, values_scale=values_scale
             )

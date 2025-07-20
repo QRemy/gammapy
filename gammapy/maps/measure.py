@@ -64,7 +64,7 @@ def containment_region(map_, fraction=0.393, apply_union=True):
             vertices = []
             for v in pp.vertices:
                 v_coord = map_.geom.pix_to_coord(v)
-                vertices.append([v_coord[0], v_coord[1]])
+                vertices.append([v_coord[0].squeeze(), v_coord[1].squeeze()])
             vertices = SkyCoord(vertices, frame=map_.geom.frame)
             regions_pieces.append(PolygonSkyRegion(vertices))
 
