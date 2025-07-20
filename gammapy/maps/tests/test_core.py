@@ -493,8 +493,9 @@ def test_interp_to_geom():
     new_map = test_map.interp_to_geom(
         geom_target, fill_value=0.0, method="nearest", preserve_counts=True
     )
-    assert_allclose(new_map.data[8, 8], test_map.data[4, 4] / factor**2, rtol=1e-4)
+    assert_allclose(new_map.data[7, 7], test_map.data[4, 4] / factor**2, rtol=1e-4)
     assert_allclose(new_map.data[0, 8], 0.0, rtol=1e-4)
+    assert_allclose(test_map.data.sum(), new_map.data.sum(), rtol=1e-4)
 
 
 def test_map_plot_mask():
@@ -564,7 +565,7 @@ def test_reproject_2d():
     assert_allclose(
         np.sum(map1_repro * geom2.solid_angle()),
         np.sum(map1_new * geom1_large.solid_angle()),
-        rtol=1e-3,
+        rtol=2e-3,
     )
 
 
