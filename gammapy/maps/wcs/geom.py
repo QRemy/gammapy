@@ -4,7 +4,7 @@ from functools import lru_cache
 import numpy as np
 import astropy.units as u
 from astropy.convolution import Tophat2DKernel
-from astropy.coordinates import Angle, SkyCoord
+from astropy.coordinates import Angle, SkyCoord, Longitude
 from astropy.io import fits
 from astropy.nddata import Cutout2D
 from astropy.nddata.utils import overlap_slices
@@ -655,7 +655,10 @@ class WcsGeom(Geom):
             pix = world2pix(self.wcs, cdelt, crpix, (coords.lon, coords.lat))
             pix = list(pix)
         else:
-            pix = self._wcs.wcs_world2pix(coords.lon, coords.lat, 0)
+            if self._projection == "CAR":
+                pix = world2pix_car(self._wcs, (coords.lon, coords.lat))
+            else:
+                pix = self._wcs.wcs_world2pix(coords.lon, coords.lat, 0)
 
         pix += self.axes.coord_to_pix(coords)
         return tuple(pix)
@@ -668,7 +671,10 @@ class WcsGeom(Geom):
             cdelt = [t[idxs] for t in self._cdelt]
             coords = pix2world(self.wcs, cdelt, crpix, pix[self._slice_spatial_axes])
         else:
-            coords = self._wcs.wcs_pix2world(pix[0], pix[1], 0)
+            if self._projection == "CAR":
+                coords = pix2world_car(self._wcs, pix)
+            else:
+                coords = self._wcs.wcs_pix2world(pix[0], pix[1], 0)
 
         coords = (
             u.Quantity(coords[0], unit="deg", copy=COPY_IF_NEEDED),
@@ -1266,3 +1272,55 @@ def world2pix(wcs, cdelt, crpix, coord):
         (pix[0] - (wcs.wcs.crpix[0] - 1.0)) * pix_ratio[0] + crpix[0] - 1.0,
         (pix[1] - (wcs.wcs.crpix[1] - 1.0)) * pix_ratio[1] + crpix[1] - 1.0,
     )
+
+
+def pix2world_car(wcs, pix):
+    """
+    Fast pixel to world coordinate transformation for regular CAR projection.
+
+    Parameters
+    ----------
+    wcs : astropy.wcs.WCS
+        WCS object with a regular CAR projection and no rotation or distortion.
+    pix : tuple
+        Pixel coordinates as tuple of (x, y)
+
+    Returns
+    -------
+    world : ndarray
+        World coordinates as tuple of (lon, lat) in degrees.
+    """
+    pix_x = np.atleast_1d(pix[0])
+    pix_y = np.atleast_1d(pix[1])
+
+    lon = wcs.wcs.crval[0] + (pix_x + 1 - wcs.wcs.crpix[0]) * wcs.wcs.cdelt[0]
+    lat = wcs.wcs.crval[1] + (pix_y + 1 - wcs.wcs.crpix[1]) * wcs.wcs.cdelt[1]
+    return Longitude(lon, unit="deg").value, lat
+
+
+def world2pix_car(wcs, coord):
+    """
+    Fast world to pixel coordinate transformation for regular CAR projection.
+
+    Parameters
+    ----------
+    wcs : astropy.wcs.WCS
+        WCS object with a regular CAR projection and no rotation or distortion.
+    pix : tuple
+        World coordinates as tuple of (lon, lat) in degrees.
+
+    Returns
+    -------
+    pix : ndarray
+        Pixel coordinates as tuple of (x, y)
+    """
+
+    lon = Longitude(np.atleast_1d(coord[0]), unit="deg").value
+    lat = u.Quantity(np.atleast_1d(coord[1])).value
+
+    # Shift longitudes to be within 180° of CRVAL[0]
+    lon = ((lon - wcs.wcs.crval[0] + 180) % 360) - 180 + wcs.wcs.crval[0]
+
+    x = (lon - wcs.wcs.crval[0]) / wcs.wcs.cdelt[0] + wcs.wcs.crpix[0] - 1
+    y = (lat - wcs.wcs.crval[1]) / wcs.wcs.cdelt[1] + wcs.wcs.crpix[1] - 1
+    return x, y
